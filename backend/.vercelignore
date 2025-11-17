@@ -1,0 +1,45 @@
+# Virtual environments
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Development files
+.env
+.env.*
+*.log
+.uv-cache/
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Git
+.git/
+.gitignore
+
+# Cache
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# Local scripts
+add_team_field.py
+apply_migration.py
+assign_admin_team.py
+check_*.py
+create_approvals_table.py
+test_*.py
+
+# Railway config (not needed for Vercel)
+railway.json
+railway.toml
+
+# Documentation
+*.md

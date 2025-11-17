@@ -21,14 +21,19 @@ This application streamlines the camper registration process with role-based acc
 - **Database**: PostgreSQL via Supabase
 - **Authentication**: JWT + Supabase Auth
 - **File Storage**: Supabase Storage
-- **Payments**: Stripe
-- **Email**: SendGrid
+- **Payments**: Stripe (TODO)
+- **Email**: SendGrid (TODO)
 - **API Documentation**: OpenAPI/Swagger (auto-generated)
 
 ### Infrastructure
 - **Database**: Supabase (PostgreSQL)
 - **Storage**: Supabase Storage
-- **Hosting**: TBD (Vercel for frontend, Railway/Render for backend)
+- **Hosting**: Vercel Pro (both frontend and backend)
+
+## Documentation
+
+- **[CLAUDE.md](CLAUDE.md)** - Comprehensive development guide with current status, architecture, and next steps
+- **[VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md)** - Complete Vercel deployment instructions for both frontend and backend
 
 ## Brand Colors
 
@@ -219,16 +224,19 @@ pytest
 
 ## Deployment
 
-### Frontend (Vercel)
-```bash
-vercel --prod
-```
+**Target**: Vercel Pro (both frontend and backend)
 
-### Backend (Railway/Render)
-```bash
-# Configure environment variables in platform dashboard
-# Push to main branch triggers deployment
-```
+See [VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md) for complete deployment instructions.
+
+Quick overview:
+1. Create TWO Vercel projects (backend + frontend)
+2. Configure environment variables in Vercel dashboard
+3. Backend uses `@vercel/python` runtime (serverless functions)
+4. Frontend uses standard Next.js deployment
+
+**Important Vercel constraints:**
+- 60s timeout (Pro plan)
+- 4.5MB request body limit (affects file uploads)
 
 ## Future Enhancements (Stretch Features)
 

@@ -47,3 +47,6 @@ coverage/
 *.pem
 .vercel
 .env.railway
+
+# Claude Code
+.mcp.json
