@@ -213,3 +213,4 @@ Later, when you want to set up production:
 - [ ] **Phase 7**: Update Google OAuth
 - [ ] **Phase 8**: Test dev environment
 - [ ] **Phase 9**: Production setup (future)
+
