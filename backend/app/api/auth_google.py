@@ -31,9 +31,9 @@ async def google_auth(auth_data: GoogleAuthRequest, db: Session = Depends(get_db
     Expects a Google ID token in the credential field.
     Verifies the token and creates/updates user account.
 
-    **Restrictions**:
-    - Only @fasdcamp.org email addresses are allowed
-    - Email must be verified by Google
+    **Auto-Role Assignment**:
+    - @fasdcamp.org email addresses are automatically assigned 'admin' role
+    - All other email addresses are assigned 'user' role
 
     **Returns**:
     - JWT access token
@@ -67,12 +67,10 @@ async def google_auth(auth_data: GoogleAuthRequest, db: Session = Depends(get_db
                 detail="Email not provided by Google"
             )
 
-        # Restrict to @fasdcamp.org domain
-        if not email.endswith('@fasdcamp.org'):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only @fasdcamp.org email addresses are allowed"
-            )
+        # Determine role based on email domain
+        # @fasdcamp.org users automatically become admins, others become regular users
+        is_fasdcamp_staff = email.endswith('@fasdcamp.org')
+        user_role = "admin" if is_fasdcamp_staff else "user"
 
         # Check if user exists by Google ID
         user = db.query(User).filter(User.google_id == google_id).first()
@@ -91,13 +89,13 @@ async def google_auth(auth_data: GoogleAuthRequest, db: Session = Depends(get_db
                     user.last_name = last_name
             else:
                 # Create new user
-                # Default @fasdcamp.org users to admin role
+                # Assign role based on email domain
                 user = User(
                     email=email,
                     google_id=google_id,
                     first_name=first_name,
                     last_name=last_name,
-                    role="admin",  # All @fasdcamp.org users are admins
+                    role=user_role,  # 'admin' for @fasdcamp.org, 'user' for others
                     email_verified=email_verified,
                     password_hash=None  # OAuth users don't have passwords
                 )
