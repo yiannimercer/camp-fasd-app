@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { AuthProvider } from '@/lib/contexts/AuthContext'
+import FeedbackWidget from '@/components/FeedbackWidget'
 import '../styles/globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -23,7 +24,9 @@ export default function RootLayout({
       <body className={inter.className}>
         <GoogleOAuthProvider clientId={googleClientId}>
           <AuthProvider>
-            {children}
+            <FeedbackWidget>
+              {children}
+            </FeedbackWidget>
           </AuthProvider>
         </GoogleOAuthProvider>
       </body>

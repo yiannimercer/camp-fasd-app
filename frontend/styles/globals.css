@@ -101,3 +101,25 @@
     background-color: #202020;
   }
 }
+
+/* React Roast Feedback Widget Customizations */
+
+/* Hide Email Input - we extract user email from JWT token instead */
+input[placeholder*="Email"],
+input[placeholder*="email"],
+input[type="email"] {
+  display: none !important;
+}
+
+/* Also hide the label/wrapper if it exists */
+label:has(input[type="email"]),
+div:has(> input[type="email"]):not(:has(> *:not(input[type="email"]))) {
+  display: none !important;
+}
+
+/* Hide "Roast Mode" text completely */
+/* The "Send Feedback" toggle button label is clear enough */
+[class*="roast"] button > span:first-child,
+[class*="island"] button > span:first-child {
+  display: none !important;
+}
