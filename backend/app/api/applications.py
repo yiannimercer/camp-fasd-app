@@ -330,6 +330,37 @@ async def update_application(
     return application
 
 
+def is_response_empty(response_value: str) -> bool:
+    """
+    Check if a response is effectively empty
+    Empty means: None, empty string, empty array [], empty object {}, or whitespace only
+    """
+    if not response_value:
+        return True
+
+    # Strip whitespace and check common empty values
+    cleaned = response_value.strip()
+    if not cleaned:
+        return True
+
+    # Check for empty JSON structures
+    if cleaned in ['[]', '{}', '""', "''", 'null']:
+        return True
+
+    # Check for JSON with only whitespace (e.g., "{ }" or "[ ]")
+    if cleaned.startswith('[') and cleaned.endswith(']'):
+        content = cleaned[1:-1].strip()
+        if not content:
+            return True
+
+    if cleaned.startswith('{') and cleaned.endswith('}'):
+        content = cleaned[1:-1].strip()
+        if not content:
+            return True
+
+    return False
+
+
 @router.get("/{application_id}/progress", response_model=ApplicationProgress)
 async def get_application_progress(
     application_id: str,
@@ -426,9 +457,12 @@ async def get_application_progress(
         visible_question_ids = [q.id for q in visible_questions]
         responses = [r for r in all_responses if r.question_id in visible_question_ids]
 
-        answered_questions = len(responses)
+        # Filter out empty responses - they don't count as answered
+        non_empty_responses = [r for r in responses if not is_response_empty(r.response_value)]
+
+        answered_questions = len(non_empty_responses)
         answered_required = sum(
-            1 for r in responses
+            1 for r in non_empty_responses
             if any(q.id == r.question_id and q.is_required for q in visible_questions)
         )
 
@@ -517,10 +551,11 @@ def calculate_completion_percentage(db: Session, application_id: str) -> int:
     if total_required == 0:
         return 100
 
-    # Count answered required questions (only those that should be visible)
+    # Count answered required questions (only those that should be visible and not empty)
     answered_required = sum(
         1 for q in required_questions
         if should_show_question(q) and str(q.id) in response_dict
+        and not is_response_empty(response_dict[str(q.id)])
     )
 
     return int((answered_required / total_required) * 100)
