@@ -105,15 +105,20 @@
 /* React Roast Feedback Widget Customizations */
 
 /* Hide Email Input - we extract user email from JWT token instead */
-input[placeholder*="Email"],
-input[placeholder*="email"],
-input[type="email"] {
+/* IMPORTANT: Only target email inputs INSIDE the React Roast widget */
+[class*="roast"] input[placeholder*="Email"],
+[class*="roast"] input[placeholder*="email"],
+[class*="roast"] input[type="email"],
+[class*="widget"] input[type="email"],
+div[role="dialog"] input[type="email"] {
   display: none !important;
 }
 
-/* Also hide the label/wrapper if it exists */
-label:has(input[type="email"]),
-div:has(> input[type="email"]):not(:has(> *:not(input[type="email"]))) {
+/* Also hide the label/wrapper if it exists - ONLY in React Roast widget */
+[class*="roast"] label:has(input[type="email"]),
+[class*="roast"] div:has(> input[type="email"]):not(:has(> *:not(input[type="email"]))),
+[class*="widget"] label:has(input[type="email"]),
+div[role="dialog"] label:has(input[type="email"]) {
   display: none !important;
 }
 
