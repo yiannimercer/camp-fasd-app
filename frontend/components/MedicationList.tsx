@@ -6,7 +6,8 @@ import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 export interface MedicationDose {
   id?: string;
   given_type: string;
-  time: string;
+  time: string;  // Stores time in HH:MM format (12-hour without AM/PM)
+  time_period?: string;  // Stores 'AM' or 'PM'
   notes: string;
   order_index: number;
 }
@@ -61,9 +62,44 @@ const DEFAULT_DOSE_FIELDS: FieldConfig[] = [
     required: true,
     options: ['At specific time', 'As needed']
   },
-  { name: 'time', label: 'Time', type: 'text', required: false, placeholder: 'HH:MM (e.g., 08:00, 14:30) or N/A' },
+  { name: 'time', label: 'Time', type: 'text', required: false, placeholder: '12:00' },
   { name: 'notes', label: 'Notes', type: 'textarea', required: false, placeholder: 'Additional instructions...' }
 ];
+
+// Helper functions for time conversion
+const convert24To12Hour = (time24: string): { time12: string; period: string } => {
+  if (!time24 || time24 === 'N/A') return { time12: '', period: 'AM' };
+
+  const [hoursStr, minutes] = time24.split(':');
+  if (!minutes) return { time12: time24, period: 'AM' };
+
+  let hours = parseInt(hoursStr);
+  if (isNaN(hours)) return { time12: time24, period: 'AM' };
+
+  const period = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  if (hours === 0) hours = 12;
+
+  return { time12: `${hours}:${minutes}`, period };
+};
+
+const convert12To24Hour = (time12: string, period: string): string => {
+  if (!time12 || time12 === 'N/A') return '';
+
+  const [hoursStr, minutes] = time12.split(':');
+  if (!minutes) return time12;
+
+  let hours = parseInt(hoursStr);
+  if (isNaN(hours)) return time12;
+
+  if (period === 'PM' && hours !== 12) {
+    hours += 12;
+  } else if (period === 'AM' && hours === 12) {
+    hours = 0;
+  }
+
+  return `${hours.toString().padStart(2, '0')}:${minutes}`;
+};
 
 export default function MedicationList({
   questionId,
@@ -74,17 +110,51 @@ export default function MedicationList({
   doseFields = DEFAULT_DOSE_FIELDS,
   isRequired = false
 }: MedicationListProps) {
-  const [medications, setMedications] = useState<Medication[]>(value || []);
+  const [medications, setMedications] = useState<Medication[]>(() => {
+    // Initialize with converted 12-hour format times
+    const convertedMeds = (value || []).map(med => ({
+      ...med,
+      doses: med.doses.map(dose => {
+        // If time_period is not set, try to convert from 24-hour format
+        if (!dose.time_period && dose.time) {
+          const { time12, period } = convert24To12Hour(dose.time);
+          return {
+            ...dose,
+            time: time12,
+            time_period: period
+          };
+        }
+        return dose;
+      })
+    }));
+    return convertedMeds;
+  });
   const [expandedMedications, setExpandedMedications] = useState<Set<number>>(new Set());
 
-  // Sync with parent when medications change
+  // Sync with parent value changes and convert times to 12-hour format
+  // Only update if the value prop has actually changed from external source
   useEffect(() => {
-    onChange(medications);
-  }, [medications]);
+    // Skip if value hasn't changed or is the same as current medications
+    if (!value || JSON.stringify(value) === JSON.stringify(medications)) {
+      return;
+    }
 
-  // Sync with parent value changes
-  useEffect(() => {
-    setMedications(value || []);
+    const convertedMeds = (value || []).map(med => ({
+      ...med,
+      doses: med.doses.map(dose => {
+        // If time_period is not set, try to convert from 24-hour format
+        if (!dose.time_period && dose.time) {
+          const { time12, period } = convert24To12Hour(dose.time);
+          return {
+            ...dose,
+            time: time12,
+            time_period: period
+          };
+        }
+        return dose;
+      })
+    }));
+    setMedications(convertedMeds);
   }, [value]);
 
   const addMedication = () => {
@@ -98,6 +168,7 @@ export default function MedicationList({
     };
     const updated = [...medications, newMedication];
     setMedications(updated);
+    onChange(updated);  // Notify parent of change
     // Auto-expand the new medication
     setExpandedMedications(new Set([...expandedMedications, medications.length]));
   };
@@ -109,6 +180,7 @@ export default function MedicationList({
       med.order_index = i;
     });
     setMedications(updated);
+    onChange(updated);  // Notify parent of change
     // Remove from expanded set
     const newExpanded = new Set(expandedMedications);
     newExpanded.delete(index);
@@ -119,6 +191,7 @@ export default function MedicationList({
     const updated = [...medications];
     updated[index] = { ...updated[index], [field]: value };
     setMedications(updated);
+    onChange(updated);  // Notify parent of change
   };
 
   const addDose = (medicationIndex: number) => {
@@ -126,11 +199,13 @@ export default function MedicationList({
     const newDose: MedicationDose = {
       given_type: '',
       time: '',
+      time_period: 'AM',  // Default to AM
       notes: '',
       order_index: updated[medicationIndex].doses.length
     };
     updated[medicationIndex].doses.push(newDose);
     setMedications(updated);
+    onChange(updated);  // Notify parent of change
   };
 
   const removeDose = (medicationIndex: number, doseIndex: number) => {
@@ -141,15 +216,17 @@ export default function MedicationList({
       dose.order_index = i;
     });
     setMedications(updated);
+    onChange(updated);  // Notify parent of change
   };
 
-  const updateDose = (medicationIndex: number, doseIndex: number, field: keyof MedicationDose, value: string) => {
+  const updateDose = (medicationIndex: number, doseIndex: number, field: string, value: string) => {
     const updated = [...medications];
     updated[medicationIndex].doses[doseIndex] = {
       ...updated[medicationIndex].doses[doseIndex],
       [field]: value
     };
     setMedications(updated);
+    onChange(updated);  // Notify parent of change
   };
 
   const toggleExpanded = (index: number) => {
@@ -164,8 +241,8 @@ export default function MedicationList({
 
   const validateTimeFormat = (time: string): boolean => {
     if (!time || time.trim() === '' || time.toUpperCase() === 'N/A') return true;
-    // Validate HH:MM format (00:00 to 23:59)
-    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    // Validate 12-hour format HH:MM (1:00 to 12:59)
+    const timeRegex = /^(0?[1-9]|1[0-2]):[0-5][0-9]$/;
     return timeRegex.test(time);
   };
 
@@ -206,26 +283,15 @@ export default function MedicationList({
       );
     }
 
-    // Special validation for time field
-    const isTimeField = field.name === 'time';
-    const isInvalidTime = isTimeField && value && !validateTimeFormat(value);
-
     return (
-      <div>
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={field.placeholder}
-          className={`${baseClasses} ${isInvalidTime ? 'border-red-500' : ''}`}
-          required={field.required}
-        />
-        {isInvalidTime && (
-          <p className="text-xs text-red-600 mt-1">
-            Please use HH:MM format (e.g., 08:00, 14:30) or enter "N/A"
-          </p>
-        )}
-      </div>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={field.placeholder}
+        className={baseClasses}
+        required={field.required}
+      />
     );
   };
 
@@ -359,20 +425,64 @@ export default function MedicationList({
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            {doseFields.map((field) => (
-                              <div key={field.name} className={field.name === 'notes' ? 'md:col-span-3' : ''}>
-                                <label className="block text-xs font-medium text-blue-900 mb-1">
-                                  {field.label}
-                                  {field.required && <span className="text-red-500 ml-1">*</span>}
-                                </label>
-                                {renderFieldInput(
-                                  field,
-                                  (dose as any)[field.name] || '',
-                                  (value) => updateDose(medIndex, doseIndex, field.name as keyof MedicationDose, value),
-                                  `dose-${medIndex}-${doseIndex}-${field.name}`
-                                )}
-                              </div>
-                            ))}
+                            {doseFields.map((field) => {
+                              // Special rendering for time field with AM/PM dropdown
+                              if (field.name === 'time') {
+                                return (
+                                  <div key={field.name}>
+                                    <label className="block text-xs font-medium text-blue-900 mb-1">
+                                      {field.label}
+                                      {field.required && <span className="text-red-500 ml-1">*</span>}
+                                    </label>
+                                    <div className="flex gap-2">
+                                      <input
+                                        type="text"
+                                        value={dose.time || ''}
+                                        onChange={(e) => updateDose(medIndex, doseIndex, 'time', e.target.value)}
+                                        placeholder="HH:MM"
+                                        className={`flex-1 px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:border-camp-green focus:ring-2 focus:ring-camp-green/20 transition-colors ${
+                                          dose.time && !validateTimeFormat(dose.time) ? 'border-red-500' : ''
+                                        }`}
+                                        disabled={dose.given_type === 'As needed'}
+                                      />
+                                      <select
+                                        value={dose.time_period || 'AM'}
+                                        onChange={(e) => updateDose(medIndex, doseIndex, 'time_period', e.target.value)}
+                                        className="px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:border-camp-green focus:ring-2 focus:ring-camp-green/20 transition-colors"
+                                        disabled={dose.given_type === 'As needed'}
+                                      >
+                                        <option value="AM">AM</option>
+                                        <option value="PM">PM</option>
+                                      </select>
+                                    </div>
+                                    {dose.time && !validateTimeFormat(dose.time) && (
+                                      <p className="text-xs text-red-600 mt-1">
+                                        Please use HH:MM format (e.g., 8:00, 12:30)
+                                      </p>
+                                    )}
+                                    {dose.given_type === 'As needed' && (
+                                      <p className="text-xs text-gray-500 mt-1">N/A for as-needed doses</p>
+                                    )}
+                                  </div>
+                                );
+                              }
+
+                              // Regular rendering for other fields
+                              return (
+                                <div key={field.name} className={field.name === 'notes' ? 'md:col-span-3' : ''}>
+                                  <label className="block text-xs font-medium text-blue-900 mb-1">
+                                    {field.label}
+                                    {field.required && <span className="text-red-500 ml-1">*</span>}
+                                  </label>
+                                  {renderFieldInput(
+                                    field,
+                                    (dose as any)[field.name] || '',
+                                    (value) => updateDose(medIndex, doseIndex, field.name, value),
+                                    `dose-${medIndex}-${doseIndex}-${field.name}`
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       ))}
