@@ -5,7 +5,7 @@
 
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/contexts/AuthContext'
 import {
@@ -18,7 +18,8 @@ import {
   ApplicationResponse
 } from '@/lib/api-applications'
 import { uploadFile, deleteFile, getFile, getFilesBatch, getTemplateFile, FileInfo } from '@/lib/api-files'
-import { getMedicationsForQuestion, saveMedicationsForQuestion, getAllergiesForQuestion, saveAllergiesForQuestion } from '@/lib/api-medications'
+// Medication/allergy APIs disabled - data now saves as JSON in main responses
+// import { getMedicationsForQuestion, saveMedicationsForQuestion, getAllergiesForQuestion, saveAllergiesForQuestion } from '@/lib/api-medications'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import ProfileHeader from '@/components/ProfileHeader'
@@ -36,7 +37,15 @@ export default function ApplicationWizardPage() {
 
   const [sections, setSections] = useState<ApplicationSection[]>([])
   const [progress, setProgress] = useState<ApplicationProgress | null>(null)
-  const [currentSectionIndex, setCurrentSectionIndex] = useState(0)
+
+  // Initialize section from localStorage for this specific application
+  const [currentSectionIndex, setCurrentSectionIndex] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(`app_section_${applicationId}`)
+      return saved ? parseInt(saved, 10) : 0
+    }
+    return 0
+  })
   const [responses, setResponses] = useState<Record<string, string>>({})
   const [uploadedFiles, setUploadedFiles] = useState<Record<string, FileInfo>>({})
   const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({})
@@ -52,6 +61,17 @@ export default function ApplicationWizardPage() {
   const [medications, setMedications] = useState<Record<string, Medication[]>>({}) // questionId -> medications
   const [allergies, setAllergies] = useState<Record<string, Allergy[]>>({}) // questionId -> allergies
   const [tableData, setTableData] = useState<Record<string, TableRow[]>>({}) // questionId -> table rows
+
+  // Track unsaved changes for immediate save on page unload
+  const hasUnsavedChanges = useRef(false)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Save current section to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`app_section_${applicationId}`, currentSectionIndex.toString())
+    }
+  }, [currentSectionIndex, applicationId])
 
   // Load sections, progress, and existing responses
   useEffect(() => {
@@ -83,6 +103,11 @@ export default function ApplicationWizardPage() {
         })
         setSections(sectionsData)
         setProgress(progressData)
+
+        // Validate the saved section index is within bounds
+        if (currentSectionIndex >= sectionsData.length) {
+          setCurrentSectionIndex(0)
+        }
 
         // Transform responses array to Record<string, string>
         const responsesMap: Record<string, string> = {}
@@ -193,24 +218,30 @@ export default function ApplicationWizardPage() {
               setProfilePictureUrl(filesMap[questionId].url);
             }
 
-            // Load medications for medication_list questions
+            // Load medications from JSON responses
             if (question.question_type === 'medication_list') {
-              getMedicationsForQuestion(applicationId, questionId).then(meds => {
-                setMedications(prev => ({ ...prev, [questionId]: meds }));
-              }).catch(err => {
-                console.error('Failed to load medications for question', questionId, err);
+              try {
+                const medsData = responsesMap[questionId]
+                  ? JSON.parse(responsesMap[questionId])
+                  : [];
+                setMedications(prev => ({ ...prev, [questionId]: medsData }));
+              } catch (err) {
+                console.error('Failed to parse medications for question', questionId, err);
                 setMedications(prev => ({ ...prev, [questionId]: [] }));
-              });
+              }
             }
 
-            // Load allergies for allergy_list questions
+            // Load allergies from JSON responses
             if (question.question_type === 'allergy_list') {
-              getAllergiesForQuestion(applicationId, questionId).then(allergyList => {
-                setAllergies(prev => ({ ...prev, [questionId]: allergyList }));
-              }).catch(err => {
-                console.error('Failed to load allergies for question', questionId, err);
+              try {
+                const allergyData = responsesMap[questionId]
+                  ? JSON.parse(responsesMap[questionId])
+                  : [];
+                setAllergies(prev => ({ ...prev, [questionId]: allergyData }));
+              } catch (err) {
+                console.error('Failed to parse allergies for question', questionId, err);
                 setAllergies(prev => ({ ...prev, [questionId]: [] }));
-              });
+              }
             }
 
             // Load table data for table questions
@@ -238,49 +269,81 @@ export default function ApplicationWizardPage() {
     loadData()
   }, [token, applicationId])
 
-  // Autosave responses every 3 seconds
+  // Aggressive autosave - triggers 500ms after user stops typing
   useEffect(() => {
     if (!token || Object.keys(responses).length === 0) return
 
-    const timer = setTimeout(async () => {
-      await saveResponses()
-    }, 3000)
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
 
-    return () => clearTimeout(timer)
+    // Mark that we have unsaved changes
+    hasUnsavedChanges.current = true
+
+    // Set new timeout for autosave - 500ms for much better UX
+    saveTimeoutRef.current = setTimeout(async () => {
+      await saveResponses()
+      hasUnsavedChanges.current = false
+    }, 500)
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
   }, [responses, token])
 
-  // Autosave medications every 3 seconds
+  // Save on page unload/refresh to prevent data loss
   useEffect(() => {
-    if (!token || Object.keys(medications).length === 0) return
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges.current && token) {
+        // Try to save synchronously (note: this may not always work in modern browsers)
+        saveResponses()
 
-    const timer = setTimeout(async () => {
-      await saveMedicationsData()
-    }, 3000)
+        // Show browser warning if there are unsaved changes
+        e.preventDefault()
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?'
+      }
+    }
 
-    return () => clearTimeout(timer)
-  }, [medications, token])
+    window.addEventListener('beforeunload', handleBeforeUnload)
 
-  // Autosave allergies every 3 seconds
-  useEffect(() => {
-    if (!token || Object.keys(allergies).length === 0) return
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      // Save any pending changes when component unmounts
+      if (hasUnsavedChanges.current && token) {
+        saveResponses()
+      }
+    }
+  }, [token])
 
-    const timer = setTimeout(async () => {
-      await saveAllergiesData()
-    }, 3000)
+  // DISABLED: Medications and allergies now save via the main responses autosave
+  // The separate API endpoints were causing 401 errors
+  // useEffect(() => {
+  //   if (!token || Object.keys(medications).length === 0) return
+  //   const timer = setTimeout(async () => {
+  //     await saveMedicationsData()
+  //   }, 3000)
+  //   return () => clearTimeout(timer)
+  // }, [medications, token])
 
-    return () => clearTimeout(timer)
-  }, [allergies, token])
+  // useEffect(() => {
+  //   if (!token || Object.keys(allergies).length === 0) return
+  //   const timer = setTimeout(async () => {
+  //     await saveAllergiesData()
+  //   }, 3000)
+  //   return () => clearTimeout(timer)
+  // }, [allergies, token])
 
-  // Autosave table data every 3 seconds
-  useEffect(() => {
-    if (!token || Object.keys(tableData).length === 0) return
-
-    const timer = setTimeout(async () => {
-      await saveTableData()
-    }, 3000)
-
-    return () => clearTimeout(timer)
-  }, [tableData, token])
+  // DISABLED: Table data now saves via the main responses autosave
+  // useEffect(() => {
+  //   if (!token || Object.keys(tableData).length === 0) return
+  //   const timer = setTimeout(async () => {
+  //     await saveTableData()
+  //   }, 3000)
+  //   return () => clearTimeout(timer)
+  // }, [tableData, token])
 
   const saveResponses = async () => {
     if (!token) return
@@ -318,82 +381,65 @@ export default function ApplicationWizardPage() {
     }
   }
 
-  const saveMedicationsData = async () => {
-    if (!token) return
+  // DISABLED: These functions are no longer needed - data saves via responses autosave
+  // const saveMedicationsData = async () => {
+  //   if (!token) return
+  //   setSaving(true)
+  //   try {
+  //     const savePromises = Object.entries(medications).map(([questionId, meds]) =>
+  //       saveMedicationsForQuestion(applicationId, questionId, meds)
+  //     )
+  //     await Promise.all(savePromises)
+  //     const progressData = await getApplicationProgress(token, applicationId)
+  //     setProgress(progressData)
+  //   } catch (error) {
+  //     console.error('Medications autosave failed:', error)
+  //   } finally {
+  //     setSaving(false)
+  //   }
+  // }
 
-    setSaving(true)
-    try {
-      // Save all medications for each question
-      const savePromises = Object.entries(medications).map(([questionId, meds]) =>
-        saveMedicationsForQuestion(applicationId, questionId, meds)
-      )
+  // const saveAllergiesData = async () => {
+  //   if (!token) return
+  //   setSaving(true)
+  //   try {
+  //     const savePromises = Object.entries(allergies).map(([questionId, allergyList]) =>
+  //       saveAllergiesForQuestion(applicationId, questionId, allergyList)
+  //     )
+  //     await Promise.all(savePromises)
+  //     const progressData = await getApplicationProgress(token, applicationId)
+  //     setProgress(progressData)
+  //   } catch (error) {
+  //     console.error('Allergies autosave failed:', error)
+  //   } finally {
+  //     setSaving(false)
+  //   }
+  // }
 
-      await Promise.all(savePromises)
-
-      // Refresh progress
-      const progressData = await getApplicationProgress(token, applicationId)
-      setProgress(progressData)
-    } catch (error) {
-      console.error('Medications autosave failed:', error)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const saveAllergiesData = async () => {
-    if (!token) return
-
-    setSaving(true)
-    try {
-      // Save all allergies for each question
-      const savePromises = Object.entries(allergies).map(([questionId, allergyList]) =>
-        saveAllergiesForQuestion(applicationId, questionId, allergyList)
-      )
-
-      await Promise.all(savePromises)
-
-      // Refresh progress
-      const progressData = await getApplicationProgress(token, applicationId)
-      setProgress(progressData)
-    } catch (error) {
-      console.error('Allergies autosave failed:', error)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const saveTableData = async () => {
-    if (!token) return
-
-    setSaving(true)
-    try {
-      // Save table data as JSON strings in responses
-      const tableResponses: Record<string, string> = {}
-      Object.entries(tableData).forEach(([questionId, rows]) => {
-        tableResponses[questionId] = JSON.stringify(rows)
-      })
-
-      // Merge with existing responses and convert to array format
-      const updatedResponses = { ...responses, ...tableResponses }
-
-      const responseArray: ApplicationResponse[] = Object.entries(updatedResponses).map(([questionId, value]) => ({
-        question_id: questionId,
-        response_value: value
-      }))
-
-      await updateApplication(token, applicationId, {
-        responses: responseArray
-      })
-
-      // Refresh progress
-      const progressData = await getApplicationProgress(token, applicationId)
-      setProgress(progressData)
-    } catch (error) {
-      console.error('Table data autosave failed:', error)
-    } finally {
-      setSaving(false)
-    }
-  }
+  // const saveTableData = async () => {
+  //   if (!token) return
+  //   setSaving(true)
+  //   try {
+  //     const tableResponses: Record<string, string> = {}
+  //     Object.entries(tableData).forEach(([questionId, rows]) => {
+  //       tableResponses[questionId] = JSON.stringify(rows)
+  //     })
+  //     const updatedResponses = { ...responses, ...tableResponses }
+  //     const responseArray: ApplicationResponse[] = Object.entries(updatedResponses).map(([questionId, value]) => ({
+  //       question_id: questionId,
+  //       response_value: value
+  //     }))
+  //     await updateApplication(token, applicationId, {
+  //       responses: responseArray
+  //     })
+  //     const progressData = await getApplicationProgress(token, applicationId)
+  //     setProgress(progressData)
+  //   } catch (error) {
+  //     console.error('Table data autosave failed:', error)
+  //   } finally {
+  //     setSaving(false)
+  //   }
+  // }
 
   const handleFileUpload = async (questionId: string, file: File) => {
     if (!token) return
@@ -476,23 +522,107 @@ export default function ApplicationWizardPage() {
     }
   }
 
-  const handleResponseChange = (questionId: string, value: string) => {
-    setResponses(prev => ({
-      ...prev,
-      [questionId]: value
-    }))
+  // Helper function to get the actual value from a response (handles JSON structure)
+  const getResponseValue = (questionId: string): string => {
+    const response = responses[questionId]
+    if (!response) return ''
 
-    // Update camper name in real-time if this is a name question
-    const question = sections.flatMap(s => s.questions).find(q => q.id === questionId);
-    if (question) {
-      const questionText = question.question_text.toLowerCase();
+    try {
+      const parsed = JSON.parse(response)
+      return parsed.value || ''
+    } catch {
+      return response
+    }
+  }
 
-      if (questionText.includes('first name') && questionText.includes('camper')) {
-        setCamperFirstName(value);
+  // Helper function to get the detail value from a response
+  const getResponseDetail = (questionId: string): string => {
+    const response = responses[questionId]
+    if (!response) return ''
+
+    try {
+      const parsed = JSON.parse(response)
+      return parsed.detail || ''
+    } catch {
+      return ''
+    }
+  }
+
+  const handleResponseChange = (questionId: string, value: string, isDetail: boolean = false) => {
+    setResponses(prev => {
+      // Create a new object to ensure React detects the change
+      const newResponses = { ...prev }
+
+      if (isDetail) {
+        // For detail responses, store as JSON with both the main answer and detail
+        const mainQuestionId = questionId.replace('_detail', '')
+
+        // Get the actual value (not the JSON string)
+        let currentValue = ''
+        const existingResponse = newResponses[mainQuestionId]
+        if (existingResponse) {
+          try {
+            const parsed = JSON.parse(existingResponse)
+            currentValue = parsed.value || ''
+          } catch {
+            currentValue = existingResponse
+          }
+        }
+
+        // Create a JSON structure that includes both the selection and the detail
+        const responseObj = {
+          value: currentValue,
+          detail: value
+        }
+
+        if (value === '') {
+          // If detail is empty, just store the main value
+          newResponses[mainQuestionId] = currentValue
+        } else {
+          // Store as JSON string
+          newResponses[mainQuestionId] = JSON.stringify(responseObj)
+        }
+      } else {
+        // For regular responses
+        if (value === '') {
+          delete newResponses[questionId]
+        } else {
+          // Check if we need to preserve existing detail
+          const existingResponse = prev[questionId]
+          try {
+            const parsed = existingResponse ? JSON.parse(existingResponse) : null
+            if (parsed && parsed.detail) {
+              // Preserve the detail when updating the main value
+              newResponses[questionId] = JSON.stringify({ value, detail: parsed.detail })
+            } else {
+              newResponses[questionId] = value
+            }
+          } catch {
+            // Not JSON, just a regular value
+            newResponses[questionId] = value
+          }
+        }
       }
 
-      if (questionText.includes('last name') && questionText.includes('camper')) {
-        setCamperLastName(value);
+      // Mark as having unsaved changes immediately
+      hasUnsavedChanges.current = true
+
+      return newResponses
+    })
+
+    // Update camper name in real-time if this is a name question
+    if (!isDetail) {
+      const question = sections.flatMap(s => s.questions).find(q => q.id === questionId);
+      if (question) {
+        const questionText = question.question_text.toLowerCase();
+
+        if (questionText.includes('first name') && questionText.includes('camper')) {
+          setCamperFirstName(value);
+        }
+
+        if (questionText.includes('last name') && questionText.includes('camper')) {
+          setCamperLastName(value);
+        }
       }
     }
   }
@@ -589,8 +719,8 @@ export default function ApplicationWizardPage() {
 
       {/* Left Sidebar - Section Navigation */}
       <aside className={`
-        fixed lg:static inset-y-0 left-0 z-50
-        w-80 bg-white border-r border-gray-200 flex flex-col shadow-lg
+        fixed lg:sticky inset-y-0 lg:top-0 left-0 z-50
+        w-80 lg:h-screen bg-white border-r border-gray-200 flex flex-col shadow-lg
         transform transition-transform duration-300 ease-in-out
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
@@ -710,11 +840,20 @@ export default function ApplicationWizardPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => router.push('/dashboard')}
+            onClick={async () => {
+              // Save any pending changes before exiting
+              if (hasUnsavedChanges.current) {
+                setSaving(true)
+                await saveResponses()
+                hasUnsavedChanges.current = false
+              }
+              router.push('/dashboard')
+            }}
             className="ml-2"
+            disabled={saving}
           >
-            <span className="hidden sm:inline">Save & Exit</span>
-            <span className="sm:hidden">Exit</span>
+            <span className="hidden sm:inline">{saving ? 'Saving...' : 'Save & Exit'}</span>
+            <span className="sm:hidden">{saving ? 'Saving...' : 'Exit'}</span>
           </Button>
         </header>
 
@@ -796,7 +935,7 @@ export default function ApplicationWizardPage() {
                     {question.question_type === 'dropdown' && question.options && (
                       <>
                         <select
-                          value={responses[question.id] || ''}
+                          value={getResponseValue(question.id)}
                           onChange={(e) => handleResponseChange(question.id, e.target.value)}
                           className="w-full min-h-[48px] px-4 py-3 text-base border-2 border-gray-300 rounded-lg focus:border-camp-green focus:ring-2 focus:ring-camp-green/20 transition-colors"
                           required={question.is_required}
@@ -811,14 +950,14 @@ export default function ApplicationWizardPage() {
                         {question.detail_prompt_trigger &&
                          question.detail_prompt_text &&
                          Array.isArray(question.detail_prompt_trigger) &&
-                         question.detail_prompt_trigger.includes(responses[question.id]) && (
+                         question.detail_prompt_trigger.includes(getResponseValue(question.id)) && (
                           <div className="mt-4 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
                             <label className="block text-sm font-medium text-blue-900 mb-2">
                               {question.detail_prompt_text}
                             </label>
                             <textarea
-                              value={responses[`${question.id}_detail`] || ''}
-                              onChange={(e) => handleResponseChange(`${question.id}_detail`, e.target.value)}
+                              value={getResponseDetail(question.id)}
+                              onChange={(e) => handleResponseChange(`${question.id}_detail`, e.target.value, true)}
                               rows={4}
                               className="w-full px-4 py-3 text-base border-2 border-blue-300 rounded-lg focus:border-camp-green focus:ring-2 focus:ring-camp-green/20 transition-colors resize-y"
                               placeholder="Please provide details..."
@@ -869,7 +1008,7 @@ export default function ApplicationWizardPage() {
                                 type="radio"
                                 name={`question-${question.id}`}
                                 value={option}
-                                checked={responses[question.id] === option}
+                                checked={getResponseValue(question.id) === option}
                                 onChange={(e) => handleResponseChange(question.id, e.target.value)}
                                 className="w-5 h-5 text-camp-green focus:ring-camp-green border-gray-300"
                                 required={question.is_required}
@@ -883,14 +1022,14 @@ export default function ApplicationWizardPage() {
                         {question.detail_prompt_trigger &&
                          question.detail_prompt_text &&
                          Array.isArray(question.detail_prompt_trigger) &&
-                         question.detail_prompt_trigger.includes(responses[question.id]) && (
+                         question.detail_prompt_trigger.includes(getResponseValue(question.id)) && (
                           <div className="mt-4 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
                             <label className="block text-sm font-medium text-blue-900 mb-2">
                               {question.detail_prompt_text}
                             </label>
                             <textarea
-                              value={responses[`${question.id}_detail`] || ''}
-                              onChange={(e) => handleResponseChange(`${question.id}_detail`, e.target.value)}
+                              value={getResponseDetail(question.id)}
+                              onChange={(e) => handleResponseChange(`${question.id}_detail`, e.target.value, true)}
                               rows={4}
                               className="w-full px-4 py-3 text-base border-2 border-blue-300 rounded-lg focus:border-camp-green focus:ring-2 focus:ring-camp-green/20 transition-colors resize-y"
                               placeholder="Please provide details..."
@@ -1099,6 +1238,8 @@ export default function ApplicationWizardPage() {
                         value={medications[question.id] || []}
                         onChange={(meds) => {
                           setMedications(prev => ({ ...prev, [question.id]: meds }))
+                          // Also update responses to trigger autosave
+                          handleResponseChange(question.id, JSON.stringify(meds))
                         }}
                         medicationFields={(question.options as any)?.medication_fields}
                         doseFields={(question.options as any)?.dose_fields}
@@ -1114,6 +1255,8 @@ export default function ApplicationWizardPage() {
                         value={allergies[question.id] || []}
                         onChange={(allergyList) => {
                           setAllergies(prev => ({ ...prev, [question.id]: allergyList }))
+                          // Also update responses to trigger autosave
+                          handleResponseChange(question.id, JSON.stringify(allergyList))
                         }}
                         allergyFields={(question.options as any)?.allergy_fields}
                         isRequired={question.is_required}
@@ -1128,6 +1271,8 @@ export default function ApplicationWizardPage() {
                         value={tableData[question.id] || []}
                         onChange={(rows) => {
                           setTableData(prev => ({ ...prev, [question.id]: rows }))
+                          // Also update responses to trigger autosave
+                          handleResponseChange(question.id, JSON.stringify(rows))
                         }}
                         columns={(question.options as any)?.columns || []}
                         addButtonText={(question.options as any)?.addButtonText}
