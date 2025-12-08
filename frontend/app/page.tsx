@@ -94,12 +94,12 @@ export default function LandingPage() {
           </h2>
 
           {/* Subheadline */}
-          <p className="text-xl md:text-2xl text-gray-600 mb-10 max-w-2xl mx-auto leading-relaxed animate-fade-in-up-delayed">
+          <p className="text-xl md:text-2xl text-gray-600 mb-10 max-w-2xl mx-auto leading-relaxed animate-fade-in-up-delayed opacity-0">
             A specialized summer camp experience designed for children and youth with Fetal Alcohol Spectrum Disorder.
           </p>
 
           {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-fade-in-up-more-delayed">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-fade-in-up-more-delayed opacity-0">
             <Link
               href="/register"
               className="group flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-camp-green to-emerald-600 text-white text-lg font-semibold rounded-2xl shadow-xl shadow-camp-green/25 hover:shadow-2xl hover:shadow-camp-green/30 hover:scale-[1.02] transition-all"
@@ -204,51 +204,6 @@ export default function LandingPage() {
         </div>
       </footer>
 
-      {/* Animation Styles */}
-      <style jsx global>{`
-        @keyframes float-slow {
-          0%, 100% { transform: translateY(0) rotate(0deg); }
-          50% { transform: translateY(-10px) rotate(3deg); }
-        }
-        @keyframes float-gentle {
-          0%, 100% { transform: translateY(0) translateX(0); opacity: 0.4; }
-          50% { transform: translateY(-15px) translateX(5px); opacity: 0.7; }
-        }
-        @keyframes fade-in {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes fade-in-up {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-float-slow {
-          animation: float-slow 8s ease-in-out infinite;
-        }
-        .animate-float-gentle {
-          animation: float-gentle 6s ease-in-out infinite;
-        }
-        .animate-float-gentle-delayed {
-          animation: float-gentle 7s ease-in-out infinite;
-          animation-delay: 2s;
-        }
-        .animate-fade-in {
-          animation: fade-in 0.8s ease-out forwards;
-        }
-        .animate-fade-in-up {
-          animation: fade-in-up 0.8s ease-out forwards;
-        }
-        .animate-fade-in-up-delayed {
-          animation: fade-in-up 0.8s ease-out forwards;
-          animation-delay: 0.2s;
-          opacity: 0;
-        }
-        .animate-fade-in-up-more-delayed {
-          animation: fade-in-up 0.8s ease-out forwards;
-          animation-delay: 0.4s;
-          opacity: 0;
-        }
-      `}</style>
     </main>
   )
 }
