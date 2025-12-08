@@ -22,6 +22,7 @@ import { uploadFile, deleteFile, getFile, getFilesBatch, getTemplateFile, FileIn
 // import { getMedicationsForQuestion, saveMedicationsForQuestion, getAllergiesForQuestion, saveAllergiesForQuestion } from '@/lib/api-medications'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { CheckCircle2, Circle, Loader2 } from 'lucide-react'
 import ProfileHeader from '@/components/ProfileHeader'
 import MedicationList, { Medication } from '@/components/MedicationList'
 import AllergyList, { Allergy } from '@/components/AllergyList'
@@ -627,15 +628,15 @@ export default function ApplicationWizardPage() {
     }
   }
 
-  const getProgressEmoji = (sectionId: string) => {
-    if (!progress) return '⭕'
+  const getProgressIcon = (sectionId: string) => {
+    if (!progress) return <Circle className="h-5 w-5 text-gray-300" />
 
     const sectionProgress = progress.section_progress.find(sp => sp.section_id === sectionId)
-    if (!sectionProgress) return '⭕'
+    if (!sectionProgress) return <Circle className="h-5 w-5 text-gray-300" />
 
-    if (sectionProgress.is_complete) return '✅'
-    if (sectionProgress.answered_questions > 0) return '🔄'
-    return '⭕'
+    if (sectionProgress.is_complete) return <CheckCircle2 className="h-5 w-5 text-camp-green" />
+    if (sectionProgress.answered_questions > 0) return <Loader2 className="h-5 w-5 text-camp-orange" />
+    return <Circle className="h-5 w-5 text-gray-300" />
   }
 
   const getProgressPercentage = (sectionId: string) => {
@@ -744,7 +745,7 @@ export default function ApplicationWizardPage() {
         {/* Sections List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {sections.map((section, index) => {
-            const emoji = getProgressEmoji(section.id)
+            const progressIcon = getProgressIcon(section.id)
             const percentage = getProgressPercentage(section.id)
             const isActive = index === currentSectionIndex
 
@@ -764,7 +765,7 @@ export default function ApplicationWizardPage() {
                       {index + 1}. {section.title}
                     </p>
                   </div>
-                  <span className="text-xl flex-shrink-0">{emoji}</span>
+                  <span className="flex-shrink-0">{progressIcon}</span>
                 </div>
 
                 {/* Progress bar */}
@@ -1407,8 +1408,9 @@ export default function ApplicationWizardPage() {
                 <div className="text-center flex-1 flex items-center justify-center">
                   <p className="text-gray-600 text-sm px-4">
                     {progress?.overall_percentage === 100 ? (
-                      <span className="text-camp-green font-medium">
-                        ✅ Application complete! Your application will be reviewed by our team.
+                      <span className="text-camp-green font-medium inline-flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5" />
+                        Application complete! Your application will be reviewed by our team.
                       </span>
                     ) : (
                       <span>

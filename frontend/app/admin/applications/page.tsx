@@ -13,6 +13,7 @@ import { acceptApplication } from '@/lib/api-admin-actions'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDateCST } from '@/lib/date-utils'
+import { Hand } from 'lucide-react'
 
 export default function AdminApplicationsPage() {
   const router = useRouter()
@@ -193,9 +194,12 @@ export default function AdminApplicationsPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-camp-charcoal mb-2">
-            Welcome back, {user?.first_name}! 👋
-          </h2>
+          <div className="flex items-center gap-3 mb-2">
+            <h2 className="text-3xl font-bold text-camp-charcoal">
+              Welcome back, {user?.first_name}!
+            </h2>
+            <Hand className="h-8 w-8 text-camp-orange" />
+          </div>
           <p className="text-gray-600">Here's an overview of all applications for this season.</p>
         </div>
 

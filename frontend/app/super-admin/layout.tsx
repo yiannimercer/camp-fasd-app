@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/contexts/AuthContext'
 import Link from 'next/link'
+import { Home, Users, UsersRound, FileEdit, Settings, Mail, ClipboardList, LucideIcon } from 'lucide-react'
 
 export default function SuperAdminLayout({
   children,
@@ -40,47 +41,47 @@ export default function SuperAdminLayout({
     return null
   }
 
-  const navigation = [
+  const navigation: { name: string; href: string; icon: LucideIcon; section: string }[] = [
     {
       name: 'Overview',
       href: '/super-admin',
-      icon: '🏠',
+      icon: Home,
       section: 'dashboard',
     },
     {
       name: 'User Management',
       href: '/super-admin/users',
-      icon: '👥',
+      icon: Users,
       section: 'users',
     },
     {
       name: 'Teams',
       href: '/super-admin/teams',
-      icon: '🤝',
+      icon: UsersRound,
       section: 'teams',
     },
     {
       name: 'Application Builder',
       href: '/super-admin/application-builder',
-      icon: '📝',
+      icon: FileEdit,
       section: 'builder',
     },
     {
       name: 'System Configuration',
       href: '/super-admin/settings',
-      icon: '⚙️',
+      icon: Settings,
       section: 'settings',
     },
     {
       name: 'Email Templates',
       href: '/super-admin/email-templates',
-      icon: '✉️',
+      icon: Mail,
       section: 'email',
     },
     {
       name: 'Audit Logs',
       href: '/super-admin/audit-logs',
-      icon: '📋',
+      icon: ClipboardList,
       section: 'audit',
     },
   ]
@@ -135,6 +136,7 @@ export default function SuperAdminLayout({
             <nav className="space-y-1">
               {navigation.map((item) => {
                 const isActive = typeof window !== 'undefined' && window.location.pathname === item.href
+                const IconComponent = item.icon
                 return (
                   <Link
                     key={item.name}
@@ -147,7 +149,7 @@ export default function SuperAdminLayout({
                       }
                     `}
                   >
-                    <span className="mr-3 text-lg">{item.icon}</span>
+                    <IconComponent className="mr-3 h-5 w-5" />
                     {item.name}
                   </Link>
                 )

@@ -9,6 +9,10 @@ venv/
 env/
 ENV/
 
+# Data
+feedback/*
+CLAUDE_BETA_FEEDBACK.md
+
 # Environment variables
 .env
 .env.local

@@ -104,18 +104,8 @@ async def create_application(
     """
     Create a new application for the current user
 
-    Users can only have one active application at a time
+    Users can create multiple applications (one per camper/child)
     """
-    # Check if user already has an application
-    existing = db.query(Application).filter(
-        Application.user_id == current_user.id
-    ).first()
-
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You already have an active application"
-        )
 
     # Create new application
     application = Application(
@@ -504,9 +494,10 @@ async def get_application_progress(
 def calculate_completion_percentage(db: Session, application_id: str) -> int:
     """
     Calculate the completion percentage for an application
-    Based on required questions answered, filtered by:
-    1. Application status (show_when_status)
-    2. Conditional logic (show_if_question_id and show_if_answer)
+    Based on COMPLETED SECTIONS / TOTAL SECTIONS
+    A section is complete when all its required questions are answered.
+
+    This matches the progress endpoint calculation for consistency.
     """
     # Get the application to check its status
     application = db.query(Application).filter(Application.id == application_id).first()
@@ -515,17 +506,27 @@ def calculate_completion_percentage(db: Session, application_id: str) -> int:
 
     app_status = application.status
 
-    # Get all required questions that match the status filter
-    required_questions = db.query(ApplicationQuestion).filter(
-        ApplicationQuestion.is_required == True,
-        ApplicationQuestion.is_active == True,
-        (ApplicationQuestion.show_when_status == None) | (ApplicationQuestion.show_when_status == app_status)
-    ).all()
+    # Get sections filtered by status
+    sections_query = db.query(ApplicationSection).filter(
+        ApplicationSection.is_active == True
+    )
 
-    if not required_questions:
+    if app_status:
+        sections_query = sections_query.filter(
+            (ApplicationSection.show_when_status == None) |
+            (ApplicationSection.show_when_status == app_status)
+        )
+    else:
+        sections_query = sections_query.filter(
+            ApplicationSection.show_when_status == None
+        )
+
+    sections = sections_query.all()
+
+    if not sections:
         return 100
 
-    # Get all responses for this application (we need these to evaluate conditional logic)
+    # Get all responses for this application
     responses = db.query(ApplicationResponse).filter(
         ApplicationResponse.application_id == application_id
     ).all()
@@ -535,27 +536,52 @@ def calculate_completion_percentage(db: Session, application_id: str) -> int:
 
     # Helper function to check if a question should be shown based on conditional logic
     def should_show_question(question: ApplicationQuestion) -> bool:
-        # If no conditional logic, always show
         if not question.show_if_question_id or not question.show_if_answer:
             return True
-
-        # Get the trigger question's response
         trigger_response = response_dict.get(str(question.show_if_question_id))
-
-        # Show the question only if the trigger response matches the expected answer
         return trigger_response == question.show_if_answer
 
-    # Count required questions that should actually be visible
-    total_required = sum(1 for q in required_questions if should_show_question(q))
+    # Count completed sections
+    completed_sections = 0
 
-    if total_required == 0:
-        return 100
+    for section in sections:
+        # Get questions for this section, filtered by status
+        questions_query = db.query(ApplicationQuestion).filter(
+            ApplicationQuestion.section_id == section.id,
+            ApplicationQuestion.is_active == True
+        )
 
-    # Count answered required questions (only those that should be visible and not empty)
-    answered_required = sum(
-        1 for q in required_questions
-        if should_show_question(q) and str(q.id) in response_dict
-        and not is_response_empty(response_dict[str(q.id)])
-    )
+        if app_status:
+            questions_query = questions_query.filter(
+                (ApplicationQuestion.show_when_status == None) |
+                (ApplicationQuestion.show_when_status == app_status)
+            )
+        else:
+            questions_query = questions_query.filter(
+                ApplicationQuestion.show_when_status == None
+            )
 
-    return int((answered_required / total_required) * 100)
+        questions = questions_query.all()
+
+        # Filter by conditional logic
+        visible_questions = [q for q in questions if should_show_question(q)]
+
+        # Count required questions in this section
+        required_questions = [q for q in visible_questions if q.is_required]
+
+        if not required_questions:
+            # Section with no required questions is considered complete
+            completed_sections += 1
+            continue
+
+        # Check if all required questions are answered (non-empty)
+        answered_required = sum(
+            1 for q in required_questions
+            if str(q.id) in response_dict and not is_response_empty(response_dict[str(q.id)])
+        )
+
+        if answered_required == len(required_questions):
+            completed_sections += 1
+
+    total_sections = len(sections)
+    return int((completed_sections / total_sections) * 100) if total_sections > 0 else 100
