@@ -677,26 +677,39 @@ export default function ApplicationWizardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-camp-green"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50/50 via-white to-emerald-50/30">
+        <div className="text-center">
+          <div className="relative">
+            <div className="w-20 h-20 bg-camp-green/10 rounded-full flex items-center justify-center mb-4 mx-auto">
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-camp-green/20 border-t-camp-green"></div>
+            </div>
+          </div>
+          <p className="text-camp-charcoal font-medium">Loading your application...</p>
+          <p className="text-gray-500 text-sm mt-1">This won't take long</p>
+        </div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <Card className="max-w-md w-full">
-          <CardHeader>
-            <CardTitle className="text-red-600">Error</CardTitle>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50/50 via-white to-emerald-50/30 px-4">
+        <Card className="max-w-md w-full shadow-xl border-0 ring-1 ring-red-200">
+          <CardHeader className="bg-red-50 border-b border-red-100">
+            <CardTitle className="text-red-700 flex items-center gap-2">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              Something went wrong
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-gray-700 mb-4">{error}</p>
-            <div className="flex gap-2">
-              <Button onClick={() => window.location.reload()} variant="primary">
+          <CardContent className="pt-6">
+            <p className="text-gray-700 mb-6">{error}</p>
+            <div className="flex gap-3">
+              <Button onClick={() => window.location.reload()} className="flex-1 bg-camp-green hover:bg-camp-green/90">
                 Try Again
               </Button>
-              <Button onClick={() => router.push('/dashboard')} variant="outline">
+              <Button onClick={() => router.push('/dashboard')} variant="outline" className="flex-1">
                 Back to Dashboard
               </Button>
             </div>
@@ -709,11 +722,11 @@ export default function ApplicationWizardPage() {
   const currentSection = sections[currentSectionIndex]
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50/50 via-white to-emerald-50/30 flex">
       {/* Mobile Overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -721,23 +734,29 @@ export default function ApplicationWizardPage() {
       {/* Left Sidebar - Section Navigation */}
       <aside className={`
         fixed lg:sticky inset-y-0 lg:top-0 left-0 z-50
-        w-80 lg:h-screen bg-white border-r border-gray-200 flex flex-col shadow-lg
+        w-80 lg:h-screen bg-white border-r border-gray-200 flex flex-col shadow-xl
         transform transition-transform duration-300 ease-in-out
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
-        {/* Header */}
-        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-camp-green to-camp-green/90">
-          <h2 className="text-xl font-bold text-white mb-1">Application Progress</h2>
-          <p className="text-white/90 text-sm">
+        {/* Header with Camp Theme */}
+        <div className="p-6 border-b border-gray-200 bg-gradient-to-br from-camp-green via-camp-green to-emerald-600 relative overflow-hidden">
+          {/* Decorative nature elements */}
+          <div className="absolute top-0 right-0 opacity-10">
+            <svg className="w-24 h-24 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2L8 6H4l8 8 8-8h-4L12 2zM4 10l8 8 8-8H4z"/>
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-white mb-1 relative z-10">🏕️ Application Progress</h2>
+          <p className="text-white/90 text-sm relative z-10">
             {progress?.completed_sections || 0} of {progress?.total_sections || 0} sections complete
           </p>
-          <div className="mt-3 bg-white/20 rounded-full h-2 overflow-hidden">
+          <div className="mt-3 bg-white/20 rounded-full h-3 overflow-hidden relative z-10">
             <div
-              className="bg-white h-full transition-all duration-500"
+              className="bg-gradient-to-r from-amber-300 to-amber-400 h-full transition-all duration-500 ease-out"
               style={{ width: `${progress?.overall_percentage || 0}%` }}
             />
           </div>
-          <p className="text-white/80 text-xs mt-1">
+          <p className="text-white/90 text-sm mt-2 font-medium relative z-10">
             {progress?.overall_percentage || 0}% Complete
           </p>
         </div>
@@ -748,15 +767,18 @@ export default function ApplicationWizardPage() {
             const progressIcon = getProgressIcon(section.id)
             const percentage = getProgressPercentage(section.id)
             const isActive = index === currentSectionIndex
+            const isComplete = percentage === 100
 
             return (
               <button
                 key={section.id}
                 onClick={() => setCurrentSectionIndex(index)}
-                className={`w-full text-left p-4 rounded-lg transition-all duration-200 ${
+                className={`w-full text-left p-4 rounded-xl transition-all duration-200 border-2 ${
                   isActive
-                    ? 'bg-camp-green text-white shadow-md'
-                    : 'bg-gray-50 hover:bg-gray-100 text-camp-charcoal'
+                    ? 'bg-gradient-to-r from-camp-green to-emerald-600 text-white shadow-lg border-transparent scale-[1.02]'
+                    : isComplete
+                      ? 'bg-green-50 hover:bg-green-100 text-camp-charcoal border-green-200 hover:border-green-300'
+                      : 'bg-white hover:bg-gray-50 text-camp-charcoal border-gray-200 hover:border-camp-green/50 hover:shadow-md'
                 }`}
               >
                 <div className="flex items-start justify-between mb-2">
@@ -772,7 +794,7 @@ export default function ApplicationWizardPage() {
                 {!isActive && (
                   <div className="bg-gray-200 rounded-full h-1.5 overflow-hidden">
                     <div
-                      className="bg-camp-orange h-full transition-all duration-500"
+                      className={`h-full transition-all duration-500 ${isComplete ? 'bg-green-500' : 'bg-camp-orange'}`}
                       style={{ width: `${percentage}%` }}
                     />
                   </div>
@@ -790,45 +812,59 @@ export default function ApplicationWizardPage() {
           })}
         </div>
 
-        {/* Autosave Indicator */}
-        <div className="p-4 border-t border-gray-200 bg-gray-50">
-          {saving ? (
-            <div className="flex items-center text-sm text-camp-orange">
-              <svg className="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-              </svg>
-              Saving...
-            </div>
-          ) : (
-            <div className="flex items-center text-sm text-gray-600">
-              <svg className="h-4 w-4 mr-2 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
-              </svg>
-              All changes saved
-            </div>
-          )}
+        {/* Autosave Indicator - Enhanced for visibility */}
+        <div className="p-4 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100">
+          <div className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-all duration-300 ${
+            saving
+              ? 'bg-amber-100 text-amber-800 border border-amber-200'
+              : 'bg-green-100 text-green-800 border border-green-200'
+          }`}>
+            {saving ? (
+              <>
+                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                </svg>
+                <span>Saving changes...</span>
+              </>
+            ) : (
+              <>
+                <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span>All changes auto-saved</span>
+              </>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 text-center mt-2">
+            Your work saves automatically as you type
+          </p>
         </div>
       </aside>
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col">
         {/* Top Bar */}
-        <header className="bg-white border-b border-gray-200 px-4 lg:px-8 py-4 flex justify-between items-center shadow-sm">
+        <header className="bg-white/80 backdrop-blur-md border-b border-gray-200 px-4 lg:px-8 py-4 flex justify-between items-center shadow-sm sticky top-0 z-30">
           <div className="flex items-center gap-3 flex-1">
             {/* Mobile Menu Button */}
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              className="lg:hidden p-2 rounded-xl bg-camp-green/10 hover:bg-camp-green/20 transition-colors"
               aria-label="Toggle menu"
             >
-              <svg className="w-6 h-6 text-camp-charcoal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-6 h-6 text-camp-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
 
             <div className="flex-1">
-              <h1 className="text-xl lg:text-2xl font-bold text-camp-charcoal">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-camp-orange bg-camp-orange/10 px-2 py-0.5 rounded-full">
+                  Section {currentSectionIndex + 1}/{sections.length}
+                </span>
+              </div>
+              <h1 className="text-xl lg:text-2xl font-bold text-camp-charcoal mt-1">
                 {currentSection?.title}
               </h1>
               {currentSection?.description && (
@@ -838,6 +874,30 @@ export default function ApplicationWizardPage() {
               )}
             </div>
           </div>
+          {/* Autosave Status - Prominent indicator users can't miss */}
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${
+            saving
+              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+              : 'bg-green-50 text-green-700 border border-green-200'
+          }`}>
+            {saving ? (
+              <>
+                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                </svg>
+                <span className="hidden sm:inline">Saving...</span>
+              </>
+            ) : (
+              <>
+                <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="hidden sm:inline">Auto-saved</span>
+              </>
+            )}
+          </div>
+
           <Button
             variant="outline"
             size="sm"
@@ -861,10 +921,24 @@ export default function ApplicationWizardPage() {
         {/* Questions */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <div className="max-w-3xl mx-auto">
-            <Card>
-              <CardHeader className="space-y-1">
-                <CardTitle className="text-lg sm:text-xl">Section {currentSectionIndex + 1} of {sections.length}</CardTitle>
-                <CardDescription className="text-sm">
+            <Card className="shadow-lg border-0 ring-1 ring-gray-200/50 overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b border-gray-100 space-y-1">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg sm:text-xl text-camp-charcoal flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-full bg-camp-green/10 flex items-center justify-center text-camp-green text-sm font-bold">
+                      {currentSectionIndex + 1}
+                    </span>
+                    {currentSection?.title}
+                  </CardTitle>
+                  {getProgressPercentage(currentSection?.id) === 100 && (
+                    <span className="flex items-center gap-1 text-sm text-green-600 bg-green-100 px-3 py-1 rounded-full">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Complete
+                    </span>
+                  )}
+                </div>
+                <CardDescription className="text-sm flex items-center gap-2">
+                  <span className="text-camp-orange">●</span>
                   Complete all required questions to proceed
                 </CardDescription>
               </CardHeader>
@@ -1382,42 +1456,59 @@ export default function ApplicationWizardPage() {
             </Card>
 
             {/* Navigation Buttons */}
-            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 mt-6 sm:mt-8">
+            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mt-8 sm:mt-10 pb-4">
               <Button
                 variant="outline"
                 size="lg"
                 onClick={() => setCurrentSectionIndex(Math.max(0, currentSectionIndex - 1))}
                 disabled={currentSectionIndex === 0}
-                className="w-full sm:w-auto min-h-[48px]"
+                className="w-full sm:w-auto min-h-[52px] text-base font-medium border-2 hover:border-camp-green hover:bg-camp-green/5 disabled:opacity-40"
               >
-                <span className="hidden sm:inline">← Previous Section</span>
-                <span className="sm:hidden">← Previous</span>
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                <span className="hidden sm:inline">Previous Section</span>
+                <span className="sm:hidden">Previous</span>
               </Button>
 
               {currentSectionIndex < sections.length - 1 ? (
                 <Button
-                  variant="primary"
                   size="lg"
                   onClick={() => setCurrentSectionIndex(currentSectionIndex + 1)}
-                  className="w-full sm:w-auto min-h-[48px]"
+                  className="w-full sm:w-auto min-h-[52px] text-base font-medium bg-gradient-to-r from-camp-green to-emerald-600 hover:from-camp-green/90 hover:to-emerald-700 shadow-lg shadow-camp-green/25 hover:shadow-xl hover:shadow-camp-green/30 transition-all"
                 >
-                  <span className="hidden sm:inline">Next Section →</span>
-                  <span className="sm:hidden">Next →</span>
+                  <span className="hidden sm:inline">Next Section</span>
+                  <span className="sm:hidden">Next</span>
+                  <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
                 </Button>
               ) : (
-                <div className="text-center flex-1 flex items-center justify-center">
-                  <p className="text-gray-600 text-sm px-4">
-                    {progress?.overall_percentage === 100 ? (
-                      <span className="text-camp-green font-medium inline-flex items-center gap-2">
-                        <CheckCircle2 className="h-5 w-5" />
-                        Application complete! Your application will be reviewed by our team.
-                      </span>
-                    ) : (
-                      <span>
-                        Complete all required questions to finish your application.
-                      </span>
-                    )}
-                  </p>
+                <div className="text-center flex-1">
+                  {progress?.overall_percentage === 100 ? (
+                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-2xl p-6 shadow-sm">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                          <CheckCircle2 className="h-10 w-10 text-green-600" />
+                        </div>
+                        <div>
+                          <p className="text-xl font-bold text-green-800">🎉 Application Complete!</p>
+                          <p className="text-green-700 text-sm mt-1">
+                            Your application will be reviewed by our team. We'll be in touch soon!
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4">
+                      <p className="text-amber-800 text-sm font-medium flex items-center justify-center gap-2">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        Complete all required questions to finish your application
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
