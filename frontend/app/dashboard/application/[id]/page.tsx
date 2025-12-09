@@ -628,21 +628,40 @@ export default function ApplicationWizardPage() {
     }
   }
 
+  // Check if a section has any required questions (used for progress display logic)
+  const sectionHasRequiredQuestions = (sectionId: string) => {
+    if (!progress) return false
+    const sectionProgress = progress.section_progress.find(sp => sp.section_id === sectionId)
+    return sectionProgress ? sectionProgress.required_questions > 0 : false
+  }
+
   const getProgressIcon = (sectionId: string) => {
     if (!progress) return <Circle className="h-5 w-5 text-gray-300" />
 
     const sectionProgress = progress.section_progress.find(sp => sp.section_id === sectionId)
     if (!sectionProgress) return <Circle className="h-5 w-5 text-gray-300" />
 
+    // If section has NO required questions, always show default (gray circle)
+    // These sections don't track progress - they're all optional
+    if (sectionProgress.required_questions === 0) {
+      return <Circle className="h-5 w-5 text-gray-300" />
+    }
+
+    // Only show progress indicators for sections WITH required questions
     if (sectionProgress.is_complete) return <CheckCircle2 className="h-5 w-5 text-camp-green" />
-    if (sectionProgress.answered_questions > 0) return <Loader2 className="h-5 w-5 text-camp-orange" />
+    if (sectionProgress.answered_required > 0) return <Loader2 className="h-5 w-5 text-camp-orange" />
     return <Circle className="h-5 w-5 text-gray-300" />
   }
 
   const getProgressPercentage = (sectionId: string) => {
     if (!progress) return 0
     const sectionProgress = progress.section_progress.find(sp => sp.section_id === sectionId)
-    return sectionProgress?.completion_percentage || 0
+    if (!sectionProgress) return 0
+
+    // If section has NO required questions, return 0 (no progress bar shown)
+    if (sectionProgress.required_questions === 0) return 0
+
+    return sectionProgress.completion_percentage || 0
   }
 
   // Check if a question should be shown based on conditional logic
@@ -767,7 +786,9 @@ export default function ApplicationWizardPage() {
             const progressIcon = getProgressIcon(section.id)
             const percentage = getProgressPercentage(section.id)
             const isActive = index === currentSectionIndex
-            const isComplete = percentage === 100
+            const hasRequired = sectionHasRequiredQuestions(section.id)
+            // Only show "complete" styling for sections that have required questions AND are 100%
+            const isComplete = hasRequired && percentage === 100
 
             return (
               <button
@@ -790,8 +811,8 @@ export default function ApplicationWizardPage() {
                   <span className="flex-shrink-0">{progressIcon}</span>
                 </div>
 
-                {/* Progress bar */}
-                {!isActive && (
+                {/* Progress bar - only show if section has required questions */}
+                {!isActive && hasRequired && (
                   <div className="bg-gray-200 rounded-full h-1.5 overflow-hidden">
                     <div
                       className={`h-full transition-all duration-500 ${isComplete ? 'bg-green-500' : 'bg-camp-orange'}`}
@@ -799,7 +820,7 @@ export default function ApplicationWizardPage() {
                     />
                   </div>
                 )}
-                {isActive && (
+                {isActive && hasRequired && (
                   <div className="bg-white/20 rounded-full h-1.5 overflow-hidden">
                     <div
                       className="bg-white h-full transition-all duration-500"
@@ -930,7 +951,8 @@ export default function ApplicationWizardPage() {
                     </span>
                     {currentSection?.title}
                   </CardTitle>
-                  {getProgressPercentage(currentSection?.id) === 100 && (
+                  {/* Only show Complete badge for sections WITH required questions */}
+                  {sectionHasRequiredQuestions(currentSection?.id) && getProgressPercentage(currentSection?.id) === 100 && (
                     <span className="flex items-center gap-1 text-sm text-green-600 bg-green-100 px-3 py-1 rounded-full">
                       <CheckCircle2 className="w-4 h-4" />
                       Complete
@@ -938,8 +960,17 @@ export default function ApplicationWizardPage() {
                   )}
                 </div>
                 <CardDescription className="text-sm flex items-center gap-2">
-                  <span className="text-camp-orange">●</span>
-                  Complete all required questions to proceed
+                  {sectionHasRequiredQuestions(currentSection?.id) ? (
+                    <>
+                      <span className="text-camp-orange">●</span>
+                      Complete all required questions to proceed
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-gray-400">○</span>
+                      All questions in this section are optional
+                    </>
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6 sm:space-y-8">

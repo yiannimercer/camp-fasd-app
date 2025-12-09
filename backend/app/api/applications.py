@@ -457,20 +457,15 @@ async def get_application_progress(
         )
 
         # Calculate section completion
-        # For sections with required questions: complete when all required are answered
-        # For sections with NO required questions: complete when ALL questions are answered
+        # ONLY required questions factor into completion - optional questions don't affect it
         if required_questions > 0:
             section_percentage = int((answered_required / required_questions) * 100)
             is_complete = answered_required == required_questions
         else:
-            # No required questions - must answer ALL questions to be complete
-            if total_questions > 0:
-                section_percentage = int((answered_questions / total_questions) * 100)
-                is_complete = answered_questions == total_questions
-            else:
-                # Section with no questions at all is complete
-                section_percentage = 100
-                is_complete = True
+            # Section with NO required questions - always counts as "complete" for overall %
+            # The frontend will hide progress indicators for these sections entirely
+            section_percentage = 0  # 0% because there's nothing to track
+            is_complete = True  # Still counts as complete for overall calculation
 
         if is_complete:
             completed_sections += 1
@@ -579,23 +574,16 @@ def calculate_completion_percentage(db: Session, application_id: str) -> int:
         total_questions = len(visible_questions)
 
         if required_questions:
-            # Has required questions - check if all required are answered
+            # Has required questions - complete when all required are answered
             answered_required = sum(
                 1 for q in required_questions
                 if str(q.id) in response_dict and not is_response_empty(response_dict[str(q.id)])
             )
             if answered_required == len(required_questions):
                 completed_sections += 1
-        elif total_questions > 0:
-            # No required questions but has optional questions - must answer ALL
-            answered_questions = sum(
-                1 for q in visible_questions
-                if str(q.id) in response_dict and not is_response_empty(response_dict[str(q.id)])
-            )
-            if answered_questions == total_questions:
-                completed_sections += 1
         else:
-            # Section with no questions at all is complete
+            # No required questions - always counts as complete for overall percentage
+            # Optional questions don't block section completion
             completed_sections += 1
 
     total_sections = len(sections)
