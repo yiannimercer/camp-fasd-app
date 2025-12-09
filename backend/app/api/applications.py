@@ -448,7 +448,11 @@ async def get_application_progress(
         responses = [r for r in all_responses if r.question_id in visible_question_ids]
 
         # Filter out empty responses - they don't count as answered
-        non_empty_responses = [r for r in responses if not is_response_empty(r.response_value)]
+        # A response is "answered" if it has a non-empty response_value OR a file_id (for file uploads)
+        non_empty_responses = [
+            r for r in responses
+            if not is_response_empty(r.response_value) or r.file_id is not None
+        ]
 
         answered_questions = len(non_empty_responses)
         answered_required = sum(
@@ -534,8 +538,21 @@ def calculate_completion_percentage(db: Session, application_id: str) -> int:
         ApplicationResponse.application_id == application_id
     ).all()
 
-    # Create a dict of question_id -> response_value for quick lookup
+    # Create dicts for quick lookup
+    # response_dict: question_id -> response_value (for text responses)
+    # file_dict: question_id -> file_id (for file uploads)
     response_dict = {str(r.question_id): r.response_value for r in responses}
+    file_dict = {str(r.question_id): r.file_id for r in responses if r.file_id is not None}
+
+    # Helper to check if a question is answered (text response OR file upload)
+    def is_question_answered(question_id: str) -> bool:
+        # Check for file upload first
+        if question_id in file_dict:
+            return True
+        # Check for text response
+        if question_id in response_dict and not is_response_empty(response_dict[question_id]):
+            return True
+        return False
 
     # Helper function to check if a question should be shown based on conditional logic
     def should_show_question(question: ApplicationQuestion) -> bool:
@@ -577,7 +594,7 @@ def calculate_completion_percentage(db: Session, application_id: str) -> int:
             # Has required questions - complete when all required are answered
             answered_required = sum(
                 1 for q in required_questions
-                if str(q.id) in response_dict and not is_response_empty(response_dict[str(q.id)])
+                if is_question_answered(str(q.id))
             )
             if answered_required == len(required_questions):
                 completed_sections += 1
