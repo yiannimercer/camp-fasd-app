@@ -19,7 +19,8 @@ class ApplicationSection(Base):
     order_index = Column(Integer, nullable=False)
     is_active = Column(Boolean, default=True, server_default="true")
     visible_before_acceptance = Column(Boolean, default=True, server_default="true")
-    show_when_status = Column(String(20), nullable=True)  # 'accepted', 'paid', or NULL for always visible
+    show_when_status = Column(String(20), nullable=True)  # Status requirement for visibility
+    tier = Column(Integer, nullable=True)  # NULL=all tiers, 1=Tier 1 only, 2=Tier 2 only
     created_at = Column(DateTime(timezone=True), server_default=text("NOW()"))
     updated_at = Column(DateTime(timezone=True), server_default=text("NOW()"), onupdate=text("NOW()"))
 
@@ -62,7 +63,8 @@ class ApplicationQuestion(Base):
     question_type = Column(String(50), nullable=False)  # text, textarea, dropdown, etc.
     options = Column(JSONB)  # For dropdown/multiple choice options
     is_required = Column(Boolean, default=False, server_default="false")
-    reset_annually = Column(Boolean, default=False, server_default="false")
+    reset_annually = Column(Boolean, default=False, server_default="false")  # Legacy field
+    persist_annually = Column(Boolean, default=False, server_default="false")  # Keep response during annual reset
     order_index = Column(Integer, nullable=False)
     validation_rules = Column(JSONB)
     help_text = Column(Text)
@@ -95,11 +97,19 @@ class Application(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     camper_first_name = Column(String(100))
     camper_last_name = Column(String(100))
-    status = Column(String(50), default="in_progress", server_default="in_progress")
+    status = Column(String(50), default="not_started", server_default="not_started")
     completion_percentage = Column(Integer, default=0, server_default="0")
     is_returning_camper = Column(Boolean, default=False, server_default="false")
     cabin_assignment = Column(String(50))
     application_data = Column(JSONB, default={}, server_default=text("'{}'::jsonb"))
+
+    # Tier system: 1 = Applicant, 2 = Camper (promoted)
+    tier = Column(Integer, default=1, server_default="1")
+
+    # Camper metadata for admin table
+    camper_age = Column(Integer, nullable=True)
+    camper_gender = Column(String(50), nullable=True)
+    tuition_status = Column(String(50), nullable=True)
 
     # Approval tracking
     ops_approved = Column(Boolean, default=False, server_default="false")
@@ -115,9 +125,16 @@ class Application(Base):
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=text("NOW()"))
     updated_at = Column(DateTime(timezone=True), server_default=text("NOW()"), onupdate=text("NOW()"))
-    completed_at = Column(DateTime(timezone=True))  # When application reached 100%
-    accepted_at = Column(DateTime(timezone=True))
-    declined_at = Column(DateTime(timezone=True))
+    completed_at = Column(DateTime(timezone=True))  # When Tier 1 reached 100%
+    under_review_at = Column(DateTime(timezone=True))  # When first admin approval received
+    promoted_to_tier2_at = Column(DateTime(timezone=True))  # When promoted to Tier 2
+    waitlisted_at = Column(DateTime(timezone=True))  # When moved to waitlist
+    deferred_at = Column(DateTime(timezone=True))  # When deferred
+    withdrawn_at = Column(DateTime(timezone=True))  # When withdrawn
+    rejected_at = Column(DateTime(timezone=True))  # When rejected
+    paid_at = Column(DateTime(timezone=True))  # When payment received
+    accepted_at = Column(DateTime(timezone=True))  # Legacy - kept for migration
+    declined_at = Column(DateTime(timezone=True))  # Legacy - kept for migration
 
     # Relationships
     user = relationship("User", foreign_keys=[user_id])

@@ -251,3 +251,34 @@ class BulkActionResult(BaseModel):
     failure_count: int
     total_count: int
     failures: List[Dict[str, Any]] = []  # List of failed items with reasons
+
+
+# ============================================================================
+# Annual Reset Schemas
+# ============================================================================
+
+class AnnualResetRequest(BaseModel):
+    """Request for annual reset operation"""
+    dry_run: bool = True  # If true, only report what would happen without making changes
+    include_paid: bool = False  # If true, also reset paid applications
+    archive_year: Optional[int] = None  # Year to archive data as (defaults to current year)
+
+
+class AnnualResetApplicationResult(BaseModel):
+    """Result for a single application in the annual reset"""
+    application_id: UUID4
+    camper_name: str
+    previous_status: str
+    responses_deleted: int
+    responses_preserved: int
+
+
+class AnnualResetResult(BaseModel):
+    """Result of annual reset operation"""
+    dry_run: bool
+    archive_year: int
+    total_applications_processed: int
+    total_responses_deleted: int
+    total_responses_preserved: int
+    applications_reset: List[AnnualResetApplicationResult]
+    skipped_statuses: Dict[str, int]  # Count of applications skipped by status

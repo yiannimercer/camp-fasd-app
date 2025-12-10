@@ -149,8 +149,8 @@ export async function getApprovalStatus(
 }
 
 /**
- * Accept an application (manually transition to 'accepted' status)
- * Requires 3 approvals from 3 different teams
+ * Accept an application (legacy - redirects to promoteToTier2)
+ * Kept for backwards compatibility
  */
 export async function acceptApplication(
   token: string,
@@ -158,11 +158,32 @@ export async function acceptApplication(
 ): Promise<{
   message: string
   application_id: string
+  tier: number
   status: string
-  accepted_at: string
+  promoted_at: string
   approved_by_teams: string[]
+  new_completion_percentage: number
 }> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/applications/${applicationId}/accept`, {
+  return promoteToTier2(token, applicationId)
+}
+
+/**
+ * Promote an application from Tier 1 to Tier 2
+ * Requires 3 approvals from 3 different teams
+ */
+export async function promoteToTier2(
+  token: string,
+  applicationId: string
+): Promise<{
+  message: string
+  application_id: string
+  tier: number
+  status: string
+  promoted_at: string
+  approved_by_teams: string[]
+  new_completion_percentage: number
+}> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/applications/${applicationId}/promote-to-tier2`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -171,7 +192,145 @@ export async function acceptApplication(
 
   if (!response.ok) {
     const error = await response.json()
-    throw new Error(error.detail || 'Failed to accept application')
+    throw new Error(error.detail || 'Failed to promote application')
+  }
+
+  return response.json()
+}
+
+/**
+ * Add an application to the waitlist
+ * Can only be called from 'under_review' status
+ */
+export async function addToWaitlist(
+  token: string,
+  applicationId: string
+): Promise<{
+  message: string
+  application_id: string
+  status: string
+  waitlisted_at: string
+}> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/applications/${applicationId}/waitlist`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to add to waitlist')
+  }
+
+  return response.json()
+}
+
+/**
+ * Remove an application from the waitlist
+ * @param action - 'promote' to promote to Tier 2, 'return_review' to return to under_review
+ */
+export async function removeFromWaitlist(
+  token: string,
+  applicationId: string,
+  action: 'promote' | 'return_review'
+): Promise<{
+  message: string
+  application_id: string
+  status: string
+}> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/applications/${applicationId}/remove-from-waitlist?action=${action}`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to remove from waitlist')
+  }
+
+  return response.json()
+}
+
+/**
+ * Defer an application to next year
+ */
+export async function deferApplication(
+  token: string,
+  applicationId: string
+): Promise<{
+  message: string
+  application_id: string
+  status: string
+  deferred_at: string
+}> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/applications/${applicationId}/defer`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to defer application')
+  }
+
+  return response.json()
+}
+
+/**
+ * Withdraw an application
+ */
+export async function withdrawApplication(
+  token: string,
+  applicationId: string
+): Promise<{
+  message: string
+  application_id: string
+  status: string
+  withdrawn_at: string
+}> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/applications/${applicationId}/withdraw`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to withdraw application')
+  }
+
+  return response.json()
+}
+
+/**
+ * Reject an application
+ * Can only be done from Tier 1 statuses
+ */
+export async function rejectApplication(
+  token: string,
+  applicationId: string
+): Promise<{
+  message: string
+  application_id: string
+  status: string
+  rejected_at: string
+}> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/applications/${applicationId}/reject`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to reject application')
   }
 
   return response.json()

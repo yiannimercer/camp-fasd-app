@@ -309,7 +309,8 @@ async def approve_application(
     """
     Approve an application (admin marks their approval)
     - Creates/updates approval record for this admin
-    - If 3 approvals reached, auto-transitions to 'accepted' status
+    - Auto-transitions 'complete' → 'under_review' on first approval
+    - 3 approvals enables the Promote to Tier 2 button
     Admin-only endpoint
     """
     try:
@@ -347,7 +348,11 @@ async def approve_application(
             ApplicationApproval.approved == True
         ).count()
 
-        # NOTE: 3 approvals no longer auto-accept - admin must manually click Accept button
+        # Auto-transition 'complete' → 'under_review' on first approval
+        if application.status == 'complete' and approval_count == 1:
+            application.status = 'under_review'
+            application.under_review_at = datetime.now(timezone.utc)
+
         db.commit()
         db.refresh(application)
 
@@ -356,7 +361,7 @@ async def approve_application(
             "application_id": str(application.id),
             "status": application.status,
             "approval_count": approval_count,
-            "accept_button_enabled": approval_count >= 3
+            "promote_button_enabled": approval_count >= 3
         }
     except HTTPException:
         raise
@@ -449,11 +454,25 @@ async def accept_application(
     current_user: User = Depends(get_current_admin_user)
 ):
     """
-    Accept an application (manually transition to 'accepted' status)
+    Legacy endpoint - redirects to promote-to-tier2
+    Kept for backwards compatibility
+    """
+    return await promote_to_tier2(application_id, db, current_user)
+
+
+@router.post("/applications/{application_id}/promote-to-tier2")
+async def promote_to_tier2(
+    application_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """
+    Promote an application from Tier 1 to Tier 2
     - Requires 3 approvals from 3 different teams
-    - Sets status to 'accepted' and records timestamp
-    - Triggers conditional questions to appear
-    - Sends acceptance email (TODO)
+    - Sets tier=2 and status='tier2_incomplete'
+    - Triggers Tier 2 sections to appear
+    - Recalculates completion percentage (may decrease due to new sections)
+    - Sends promotion email (TODO)
     Admin/Super Admin only endpoint
     """
     try:
@@ -464,11 +483,12 @@ async def accept_application(
                 detail="Application not found"
             )
 
-        # Verify application is in under_review status
-        if application.status != 'under_review':
+        # Verify application is in a valid status for promotion
+        valid_statuses = ['under_review', 'waitlist']
+        if application.status not in valid_statuses:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Application must be 'under_review' to accept. Current status: {application.status}"
+                detail=f"Application must be 'under_review' or 'waitlist' to promote. Current status: {application.status}"
             )
 
         # Count approvals and verify 3 approvals from different teams
@@ -494,26 +514,30 @@ async def accept_application(
                 detail=f"Application requires approvals from 3 different teams. Current teams: {', '.join(teams)}"
             )
 
-        # Accept the application
-        application.status = 'accepted'
+        # Promote to Tier 2
+        application.tier = 2
+        application.status = 'tier2_incomplete'
+        application.promoted_to_tier2_at = datetime.now(timezone.utc)
+        # Keep legacy field for reference
         application.accepted_at = datetime.now(timezone.utc)
 
         db.commit()
         db.refresh(application)
 
-        # Recalculate progress - will now include conditional post-acceptance questions
+        # Recalculate progress - will now include Tier 2 sections
         from app.api.applications import calculate_completion_percentage
         new_progress = calculate_completion_percentage(db, application_id)
         application.completion_percentage = new_progress
         db.commit()
 
-        # TODO: Send acceptance email to family
+        # TODO: Send promotion/acceptance email to family
 
         return {
-            "message": "Application accepted successfully - new sections now available",
+            "message": "Application promoted to Tier 2 - new sections now available",
             "application_id": str(application.id),
+            "tier": application.tier,
             "status": application.status,
-            "accepted_at": application.accepted_at.isoformat(),
+            "promoted_at": application.promoted_to_tier2_at.isoformat(),
             "approved_by_teams": list(teams),
             "new_completion_percentage": new_progress
         }
@@ -525,7 +549,7 @@ async def accept_application(
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error accepting application: {str(e)}"
+            detail=f"Error promoting application: {str(e)}"
         )
 
 
@@ -593,4 +617,284 @@ async def update_application_admin(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error updating application: {str(e)}"
+        )
+
+
+# ============================================================================
+# Status Transition Endpoints - Tiered Status System
+# ============================================================================
+
+@router.post("/applications/{application_id}/waitlist")
+async def add_to_waitlist(
+    application_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """
+    Move an application to the waitlist
+    - Can only be called from 'under_review' status
+    - Sets status='waitlist' and records timestamp
+    Admin-only endpoint
+    """
+    try:
+        application = db.query(Application).filter(Application.id == application_id).first()
+        if not application:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Application not found"
+            )
+
+        if application.status != 'under_review':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Application must be 'under_review' to add to waitlist. Current status: {application.status}"
+            )
+
+        application.status = 'waitlist'
+        application.waitlisted_at = datetime.now(timezone.utc)
+
+        db.commit()
+        db.refresh(application)
+
+        return {
+            "message": "Application added to waitlist",
+            "application_id": str(application.id),
+            "status": application.status,
+            "waitlisted_at": application.waitlisted_at.isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error adding to waitlist: {str(e)}"
+        )
+
+
+@router.post("/applications/{application_id}/remove-from-waitlist")
+async def remove_from_waitlist(
+    application_id: str,
+    action: str,  # 'promote' or 'return_review'
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """
+    Remove an application from the waitlist
+    - action='promote' → Promote directly to Tier 2 (requires 3 approvals)
+    - action='return_review' → Return to under_review status
+    Admin-only endpoint
+    """
+    try:
+        application = db.query(Application).filter(Application.id == application_id).first()
+        if not application:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Application not found"
+            )
+
+        if application.status != 'waitlist':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Application must be on 'waitlist' to remove. Current status: {application.status}"
+            )
+
+        if action == 'promote':
+            # Promote directly to Tier 2 (uses existing promote logic)
+            return await promote_to_tier2(application_id, db, current_user)
+
+        elif action == 'return_review':
+            application.status = 'under_review'
+            application.waitlisted_at = None  # Clear waitlist timestamp
+
+            db.commit()
+            db.refresh(application)
+
+            return {
+                "message": "Application returned to review",
+                "application_id": str(application.id),
+                "status": application.status
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid action: {action}. Must be 'promote' or 'return_review'"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error removing from waitlist: {str(e)}"
+        )
+
+
+@router.post("/applications/{application_id}/defer")
+async def defer_application(
+    application_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """
+    Defer an application to next year
+    - Sets status='deferred' and records timestamp
+    - Can be done from most statuses
+    Admin-only endpoint
+    """
+    try:
+        application = db.query(Application).filter(Application.id == application_id).first()
+        if not application:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Application not found"
+            )
+
+        # Can't defer if already in a terminal inactive state
+        terminal_states = ['paid', 'rejected', 'withdrawn']
+        if application.status in terminal_states:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot defer application with status '{application.status}'"
+            )
+
+        application.status = 'deferred'
+        application.deferred_at = datetime.now(timezone.utc)
+
+        db.commit()
+        db.refresh(application)
+
+        return {
+            "message": "Application deferred to next year",
+            "application_id": str(application.id),
+            "status": application.status,
+            "deferred_at": application.deferred_at.isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deferring application: {str(e)}"
+        )
+
+
+@router.post("/applications/{application_id}/withdraw")
+async def withdraw_application(
+    application_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """
+    Withdraw an application
+    - Sets status='withdrawn' and records timestamp
+    - Can be done from most statuses
+    Admin-only endpoint
+    """
+    try:
+        application = db.query(Application).filter(Application.id == application_id).first()
+        if not application:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Application not found"
+            )
+
+        # Can't withdraw if already in a terminal state
+        terminal_states = ['paid', 'rejected', 'deferred']
+        if application.status in terminal_states:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot withdraw application with status '{application.status}'"
+            )
+
+        application.status = 'withdrawn'
+        application.withdrawn_at = datetime.now(timezone.utc)
+
+        db.commit()
+        db.refresh(application)
+
+        return {
+            "message": "Application withdrawn",
+            "application_id": str(application.id),
+            "status": application.status,
+            "withdrawn_at": application.withdrawn_at.isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error withdrawing application: {str(e)}"
+        )
+
+
+@router.post("/applications/{application_id}/reject")
+async def reject_application(
+    application_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """
+    Reject an application
+    - Sets status='rejected' and records timestamp
+    - Can only be done from Tier 1 statuses
+    Admin-only endpoint
+    """
+    try:
+        application = db.query(Application).filter(Application.id == application_id).first()
+        if not application:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Application not found"
+            )
+
+        # Can only reject Tier 1 applications that haven't already been rejected
+        if application.tier == 2:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot reject an application that has already been promoted to Tier 2"
+            )
+
+        terminal_states = ['rejected', 'deferred', 'withdrawn']
+        if application.status in terminal_states:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot reject application with status '{application.status}'"
+            )
+
+        application.status = 'rejected'
+        application.rejected_at = datetime.now(timezone.utc)
+        # Keep legacy field for reference
+        application.declined_at = datetime.now(timezone.utc)
+
+        db.commit()
+        db.refresh(application)
+
+        # TODO: Send rejection email to family
+
+        return {
+            "message": "Application rejected",
+            "application_id": str(application.id),
+            "status": application.status,
+            "rejected_at": application.rejected_at.isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error rejecting application: {str(e)}"
         )

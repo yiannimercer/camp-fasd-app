@@ -23,9 +23,23 @@ export interface ApplicationWithUser {
   completion_percentage: number
   is_returning_camper: boolean
   cabin_assignment?: string
+  // Tier system
+  tier: number  // 1 = Applicant, 2 = Camper (promoted)
+  camper_age?: number
+  camper_gender?: string
+  tuition_status?: string
   created_at: string
   updated_at: string
-  completed_at?: string  // When application reached 100%
+  // Status timestamps
+  completed_at?: string  // When Tier 1 reached 100%
+  under_review_at?: string  // When first admin approval received
+  promoted_to_tier2_at?: string  // When promoted to Tier 2
+  waitlisted_at?: string  // When moved to waitlist
+  deferred_at?: string  // When deferred
+  withdrawn_at?: string  // When withdrawn
+  rejected_at?: string  // When rejected
+  paid_at?: string  // When payment received
+  // Admin info
   approval_count?: number
   approved_by_teams?: string[]
   responses?: Array<{

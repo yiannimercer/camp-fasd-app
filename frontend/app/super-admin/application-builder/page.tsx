@@ -96,6 +96,12 @@ const visibilityOptions = [
   { value: 'paid', label: 'After Payment', description: 'Show only after payment is complete' },
 ];
 
+const tierOptions = [
+  { value: 'all', label: 'All Tiers', description: 'Show for both Tier 1 and Tier 2' },
+  { value: '1', label: 'Tier 1 Only', description: 'Show only for applicants (before promotion)' },
+  { value: '2', label: 'Tier 2 Only', description: 'Show only for campers (after promotion)' },
+];
+
 // Default field configurations for medication and allergy lists
 const DEFAULT_MEDICATION_FIELDS: FieldConfig[] = [
   { name: 'medication_name', label: 'Medication', type: 'text', required: true, placeholder: 'e.g., Adderall' },
@@ -157,6 +163,7 @@ export default function ApplicationBuilderPage() {
     title: '',
     description: '',
     show_when_status: 'always' as 'always' | 'accepted' | 'paid',
+    tier: 'all' as 'all' | '1' | '2',
     is_active: true,
   });
 
@@ -167,6 +174,7 @@ export default function ApplicationBuilderPage() {
     help_text: '',
     is_required: true,
     is_active: true,
+    persist_annually: false,
     show_when_status: null,
     options: [],
     validation_rules: {},
@@ -205,6 +213,7 @@ export default function ApplicationBuilderPage() {
       title: '',
       description: '',
       show_when_status: 'always',
+      tier: 'all',
       is_active: true,
     });
     setEditingSectionId(null);
@@ -216,6 +225,7 @@ export default function ApplicationBuilderPage() {
       title: section.title,
       description: section.description || '',
       show_when_status: (section.show_when_status || 'always') as 'always' | 'accepted' | 'paid',
+      tier: section.tier ? String(section.tier) as '1' | '2' : 'all',
       is_active: section.is_active,
     });
     setEditingSectionId(section.id);
@@ -235,6 +245,7 @@ export default function ApplicationBuilderPage() {
           description: sectionForm.description,
           is_active: sectionForm.is_active,
           show_when_status: sectionForm.show_when_status === 'always' ? null : sectionForm.show_when_status,
+          tier: sectionForm.tier === 'all' ? null : parseInt(sectionForm.tier),
         });
         setSections(prev => prev.map(s => s.id === editingSectionId ? updated : s));
       } else {
@@ -245,6 +256,7 @@ export default function ApplicationBuilderPage() {
           order_index: sections.length,
           is_active: sectionForm.is_active,
           show_when_status: sectionForm.show_when_status === 'always' ? null : sectionForm.show_when_status,
+          tier: sectionForm.tier === 'all' ? null : parseInt(sectionForm.tier),
         });
         setSections(prev => [...prev, created]);
       }
@@ -282,6 +294,7 @@ export default function ApplicationBuilderPage() {
       help_text: '',
       is_required: true,
       is_active: true,
+      persist_annually: false,
       show_when_status: 'always',
       options: [],
       validation_rules: {},
@@ -318,6 +331,7 @@ export default function ApplicationBuilderPage() {
           placeholder: questionForm.placeholder,
           is_required: questionForm.is_required,
           is_active: questionForm.is_active,
+          persist_annually: questionForm.persist_annually,
           options: questionForm.options,
           validation_rules: questionForm.validation_rules,
           show_when_status: questionForm.show_when_status,
@@ -353,6 +367,7 @@ export default function ApplicationBuilderPage() {
           placeholder: questionForm.placeholder,
           is_required: questionForm.is_required!,
           is_active: questionForm.is_active!,
+          persist_annually: questionForm.persist_annually,
           order_index: selectedSection.questions.length,
           options: questionForm.options,
           validation_rules: questionForm.validation_rules,
@@ -929,6 +944,11 @@ export default function ApplicationBuilderPage() {
                           {visibilityOptions.find(v => v.value === section.show_when_status)?.label}
                         </Badge>
                       )}
+                      {section.tier && (
+                        <Badge variant="outline" className="bg-purple-50 border-purple-300 text-purple-700">
+                          {section.tier === 1 ? 'Tier 1 Only' : 'Tier 2 Only'}
+                        </Badge>
+                      )}
                     </div>
                     {section.description && (
                       <CardDescription className="mt-1">{section.description}</CardDescription>
@@ -1143,6 +1163,15 @@ export default function ApplicationBuilderPage() {
                                   {question.template_filename}
                                 </Badge>
                               )}
+                              {question.persist_annually && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs bg-amber-50 border-amber-300 text-amber-700"
+                                  title="Response will persist during annual reset"
+                                >
+                                  📌 Persists Annually
+                                </Badge>
+                              )}
                             </div>
                             {(() => {
                               const conditionalInfo = getConditionalLogicInfo(question);
@@ -1297,6 +1326,33 @@ export default function ApplicationBuilderPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="section-tier">Application Tier</Label>
+              <Select
+                value={sectionForm.tier}
+                onValueChange={(value: any) =>
+                  setSectionForm(prev => ({ ...prev, tier: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {tierOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      <div>
+                        <div className="font-medium">{option.label}</div>
+                        <div className="text-xs text-muted-foreground">{option.description}</div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Tier 1 = Applicant (before promotion), Tier 2 = Camper (after promotion)
+              </p>
             </div>
 
             <div className="flex items-center justify-between">
@@ -1813,6 +1869,24 @@ export default function ApplicationBuilderPage() {
                   checked={questionForm.is_active}
                   onCheckedChange={(checked) =>
                     setQuestionForm(prev => ({ ...prev, is_active: checked }))
+                  }
+                />
+              </div>
+            </div>
+
+            {/* Persist Annually toggle */}
+            <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-amber-900">Persist Annually</Label>
+                  <div className="text-sm text-amber-700">
+                    Keep this response during annual reset (e.g., camper name, date of birth)
+                  </div>
+                </div>
+                <Switch
+                  checked={questionForm.persist_annually || false}
+                  onCheckedChange={(checked) =>
+                    setQuestionForm(prev => ({ ...prev, persist_annually: checked }))
                   }
                 />
               </div>

@@ -107,12 +107,12 @@ async def create_application(
     Users can create multiple applications (one per camper/child)
     """
 
-    # Create new application
+    # Create new application with 'not_started' status
     application = Application(
         user_id=current_user.id,
         camper_first_name=application_data.camper_first_name,
         camper_last_name=application_data.camper_last_name,
-        status="in_progress"
+        status="not_started"
     )
 
     db.add(application)
@@ -309,10 +309,24 @@ async def update_application(
     completion = calculate_completion_percentage(db, application_id)
     application.completion_percentage = completion
 
-    # Auto-mark as under_review when 100% complete
-    if completion == 100 and application.status == "in_progress":
-        application.status = "under_review"
-        application.completed_at = datetime.now(timezone.utc)
+    # Auto status transitions based on tiered status system
+    current_status = application.status
+    current_tier = getattr(application, 'tier', 1) or 1
+
+    if current_tier == 1:
+        # Tier 1 transitions
+        if current_status == 'not_started' and completion > 0:
+            # First response → incomplete
+            application.status = 'incomplete'
+        elif current_status == 'incomplete' and completion == 100:
+            # 100% complete → complete (ready for review)
+            application.status = 'complete'
+            application.completed_at = datetime.now(timezone.utc)
+    elif current_tier == 2:
+        # Tier 2 transitions
+        if current_status == 'tier2_incomplete' and completion == 100:
+            # Tier 2 100% complete → unpaid (ready for payment)
+            application.status = 'unpaid'
 
     db.commit()
     db.refresh(application)
@@ -505,19 +519,35 @@ def calculate_completion_percentage(db: Session, application_id: str) -> int:
     A section is complete when all its required questions are answered.
 
     This matches the progress endpoint calculation for consistency.
+
+    Tier filtering:
+    - Tier 1 users see: sections with tier=NULL or tier=1
+    - Tier 2 users see: all sections (tier=NULL, tier=1, tier=2)
     """
-    # Get the application to check its status
+    # Get the application to check its status and tier
     application = db.query(Application).filter(Application.id == application_id).first()
     if not application:
         return 0
 
     app_status = application.status
+    app_tier = getattr(application, 'tier', 1) or 1  # Default to tier 1
 
-    # Get sections filtered by status
+    # Get sections filtered by tier and status
     sections_query = db.query(ApplicationSection).filter(
         ApplicationSection.is_active == True
     )
 
+    # Filter sections by tier
+    # Tier 1: Show sections with tier=NULL or tier=1
+    # Tier 2: Show all sections (no tier filter needed)
+    if app_tier == 1:
+        sections_query = sections_query.filter(
+            (ApplicationSection.tier == None) |
+            (ApplicationSection.tier == 1)
+        )
+    # For Tier 2, include all sections (no tier filter)
+
+    # Filter sections by status
     if app_status:
         sections_query = sections_query.filter(
             (ApplicationSection.show_when_status == None) |

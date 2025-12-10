@@ -11,7 +11,7 @@ from sqlalchemy import func, or_, and_
 from app.core.database import get_db
 from app.core.deps import get_current_super_admin_user
 from app.models.user import User
-from app.models.application import Application
+from app.models.application import Application, ApplicationResponse, ApplicationQuestion
 from app.models.super_admin import SystemConfiguration, AuditLog, EmailTemplate, Team
 from app.schemas.super_admin import (
     SystemConfiguration as SystemConfigurationSchema,
@@ -32,7 +32,10 @@ from app.schemas.super_admin import (
     DashboardStats,
     TeamPerformance,
     BulkUserAction,
-    BulkActionResult
+    BulkActionResult,
+    AnnualResetRequest,
+    AnnualResetResult,
+    AnnualResetApplicationResult
 )
 from app.schemas.user import UserResponse
 
@@ -719,3 +722,177 @@ async def get_audit_logs(
         result.append(AuditLogWithActor(**log_dict))
 
     return result
+
+
+# ============================================================================
+# ANNUAL RESET
+# ============================================================================
+
+@router.post("/annual-reset", response_model=AnnualResetResult)
+async def perform_annual_reset(
+    reset_request: AnnualResetRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin_user)
+):
+    """
+    Perform annual reset of applications for the new camp season.
+
+    This endpoint:
+    1. Resets all active applications to 'not_started' status
+    2. Preserves responses for questions marked with persist_annually=True
+    3. Deletes all other responses
+    4. Resets approval tracking and timestamps
+    5. Logs the action for audit purposes
+
+    Use dry_run=True to preview changes without applying them.
+    """
+
+    # Determine archive year
+    archive_year = reset_request.archive_year or datetime.now().year
+
+    # Define which statuses to skip (terminal states that shouldn't be reset)
+    skip_statuses = {'rejected', 'declined', 'withdrawn', 'deferred'}
+    if not reset_request.include_paid:
+        skip_statuses.add('paid')
+
+    # Get all applications grouped by status
+    all_applications = db.query(Application).all()
+
+    # Track skipped applications by status
+    skipped_by_status = {}
+    applications_to_reset = []
+
+    for app in all_applications:
+        if app.status in skip_statuses:
+            skipped_by_status[app.status] = skipped_by_status.get(app.status, 0) + 1
+        else:
+            applications_to_reset.append(app)
+
+    # Get all question IDs that should persist annually
+    persistent_question_ids = set(
+        str(q.id) for q in db.query(ApplicationQuestion).filter(
+            ApplicationQuestion.persist_annually == True
+        ).all()
+    )
+
+    # Process each application
+    application_results = []
+    total_responses_deleted = 0
+    total_responses_preserved = 0
+
+    for app in applications_to_reset:
+        camper_name = f"{app.camper_first_name or ''} {app.camper_last_name or ''}".strip() or "Unknown"
+        previous_status = app.status
+
+        # Get all responses for this application
+        responses = db.query(ApplicationResponse).filter(
+            ApplicationResponse.application_id == app.id
+        ).all()
+
+        responses_to_delete = []
+        responses_to_keep = []
+
+        for response in responses:
+            if str(response.question_id) in persistent_question_ids:
+                responses_to_keep.append(response)
+            else:
+                responses_to_delete.append(response)
+
+        responses_deleted_count = len(responses_to_delete)
+        responses_preserved_count = len(responses_to_keep)
+
+        total_responses_deleted += responses_deleted_count
+        total_responses_preserved += responses_preserved_count
+
+        # If not a dry run, actually make the changes
+        if not reset_request.dry_run:
+            # Delete non-persistent responses
+            for response in responses_to_delete:
+                db.delete(response)
+
+            # Reset application state
+            app.status = 'not_started'
+            app.tier = 1
+            app.completion_percentage = 0
+
+            # Clear approval flags
+            app.ops_approved = False
+            app.behavioral_approved = False
+            app.medical_approved = False
+            app.ops_approved_by = None
+            app.behavioral_approved_by = None
+            app.medical_approved_by = None
+            app.ops_approved_at = None
+            app.behavioral_approved_at = None
+            app.medical_approved_at = None
+
+            # Clear timestamps (except created_at)
+            app.completed_at = None
+            app.under_review_at = None
+            app.promoted_to_tier2_at = None
+            app.waitlisted_at = None
+            app.deferred_at = None
+            app.withdrawn_at = None
+            app.rejected_at = None
+            app.paid_at = None
+            app.accepted_at = None
+            app.declined_at = None
+
+            # Update timestamp
+            app.updated_at = datetime.now(timezone.utc)
+
+        application_results.append(AnnualResetApplicationResult(
+            application_id=app.id,
+            camper_name=camper_name,
+            previous_status=previous_status,
+            responses_deleted=responses_deleted_count,
+            responses_preserved=responses_preserved_count
+        ))
+
+    # Commit changes if not a dry run
+    if not reset_request.dry_run:
+        db.commit()
+
+        # Create audit log
+        audit_log = AuditLog(
+            entity_type='system',
+            entity_id=None,
+            action='annual_reset',
+            actor_id=current_user.id,
+            details={
+                'archive_year': archive_year,
+                'applications_reset': len(applications_to_reset),
+                'responses_deleted': total_responses_deleted,
+                'responses_preserved': total_responses_preserved,
+                'skipped_statuses': skipped_by_status
+            }
+        )
+        db.add(audit_log)
+        db.commit()
+
+    return AnnualResetResult(
+        dry_run=reset_request.dry_run,
+        archive_year=archive_year,
+        total_applications_processed=len(applications_to_reset),
+        total_responses_deleted=total_responses_deleted,
+        total_responses_preserved=total_responses_preserved,
+        applications_reset=application_results,
+        skipped_statuses=skipped_by_status
+    )
+
+
+@router.get("/annual-reset/preview", response_model=AnnualResetResult)
+async def preview_annual_reset(
+    include_paid: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin_user)
+):
+    """
+    Preview what the annual reset would do without making any changes.
+    This is a convenience endpoint equivalent to POST with dry_run=True.
+    """
+    return await perform_annual_reset(
+        AnnualResetRequest(dry_run=True, include_paid=include_paid),
+        db=db,
+        current_user=current_user
+    )

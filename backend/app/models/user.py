@@ -26,5 +26,11 @@ class User(Base):
     last_login = Column(DateTime(timezone=True), nullable=True)
     email_verified = Column(Boolean, default=False, server_default="false")
 
+    # Account status fields
+    status = Column(String(20), server_default="active")  # active, inactive, suspended
+    suspended_at = Column(DateTime(timezone=True), nullable=True)
+    suspended_by = Column(UUID(as_uuid=True), nullable=True)  # References users.id
+    suspension_reason = Column(String, nullable=True)
+
     def __repr__(self):
         return f"<User {self.email} ({self.role})>"

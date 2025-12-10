@@ -14,6 +14,7 @@ export interface Question {
   placeholder?: string;
   is_required: boolean;
   is_active: boolean;
+  persist_annually: boolean;  // Keep response during annual reset
   order_index: number;
   options?: string[];
   validation_rules?: {
@@ -53,6 +54,7 @@ export interface Section {
   order_index: number;
   is_active: boolean;
   show_when_status?: string | null;
+  tier?: number | null;  // NULL=all tiers, 1=Tier 1 only, 2=Tier 2 only
   created_at: string;
   updated_at: string;
   questions: Question[];
@@ -65,6 +67,7 @@ export interface SectionCreate {
   order_index: number;
   is_active?: boolean;
   show_when_status?: string | null;
+  tier?: number | null;
 }
 
 export interface SectionUpdate {
@@ -73,6 +76,7 @@ export interface SectionUpdate {
   order_index?: number;
   is_active?: boolean;
   show_when_status?: string | null;
+  tier?: number | null;
 }
 
 export interface QuestionCreate {
@@ -84,6 +88,7 @@ export interface QuestionCreate {
   placeholder?: string;
   is_required?: boolean;
   is_active?: boolean;
+  persist_annually?: boolean;
   order_index: number;
   options?: string[];
   validation_rules?: any;
@@ -103,6 +108,7 @@ export interface QuestionUpdate {
   placeholder?: string;
   is_required?: boolean;
   is_active?: boolean;
+  persist_annually?: boolean;
   order_index?: number;
   options?: string[];
   validation_rules?: any;

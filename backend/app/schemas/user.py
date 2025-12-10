@@ -45,9 +45,13 @@ class UserResponse(BaseModel):
     email: EmailStr
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    phone: Optional[str] = None
     role: str
     team: Optional[str] = None
+    status: Optional[str] = "active"
     email_verified: bool
+    created_at: datetime
+    last_login: Optional[datetime] = None
 
     class Config:
         from_attributes = True

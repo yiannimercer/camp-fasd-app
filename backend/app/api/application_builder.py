@@ -36,6 +36,7 @@ class QuestionBase(BaseModel):
     placeholder: Optional[str] = None
     is_required: bool = False
     is_active: bool = True
+    persist_annually: bool = False  # Keep response during annual reset
     order_index: int
     options: Optional[Union[List[str], Dict[str, Any]]] = None
     validation_rules: Optional[QuestionValidationRules] = None
@@ -59,6 +60,7 @@ class QuestionUpdate(BaseModel):
     placeholder: Optional[str] = None
     is_required: Optional[bool] = None
     is_active: Optional[bool] = None
+    persist_annually: Optional[bool] = None
     order_index: Optional[int] = None
     options: Optional[Union[List[str], Dict[str, Any]]] = None
     validation_rules: Optional[QuestionValidationRules] = None
@@ -86,6 +88,7 @@ class SectionBase(BaseModel):
     order_index: int
     is_active: bool = True
     show_when_status: Optional[str] = None
+    tier: Optional[int] = None  # NULL=all tiers, 1=Tier 1 only, 2=Tier 2 only
 
 
 class SectionCreate(SectionBase):
@@ -98,6 +101,7 @@ class SectionUpdate(BaseModel):
     order_index: Optional[int] = None
     is_active: Optional[bool] = None
     show_when_status: Optional[str] = None
+    tier: Optional[int] = None
 
 
 class SectionWithQuestions(SectionBase):
@@ -166,6 +170,7 @@ def convert_section_to_response(section: ApplicationSection) -> dict:
         "order_index": section.order_index,
         "is_active": section.is_active,
         "show_when_status": section.show_when_status,
+        "tier": section.tier,
         "created_at": section.created_at.isoformat(),
         "updated_at": section.updated_at.isoformat(),
         "questions": [convert_question_to_response(q) for q in section.questions],
@@ -200,6 +205,7 @@ def convert_question_to_response(question: ApplicationQuestion) -> dict:
         "placeholder": question.placeholder,
         "is_required": question.is_required,
         "is_active": question.is_active,
+        "persist_annually": question.persist_annually,
         "order_index": question.order_index,
         "options": question.options,
         "validation_rules": question.validation_rules,
@@ -254,7 +260,8 @@ async def create_section(
         description=section.description,
         order_index=section.order_index,
         is_active=section.is_active,
-        show_when_status=show_when_status_value
+        show_when_status=show_when_status_value,
+        tier=section.tier
     )
 
     db.add(new_section)
@@ -298,6 +305,8 @@ async def update_section(
         if show_when_status_value == 'always':
             show_when_status_value = None
         db_section.show_when_status = show_when_status_value
+    if section.tier is not None:
+        db_section.tier = section.tier
 
     db.commit()
     db.refresh(db_section)
@@ -361,6 +370,7 @@ async def create_question(
         placeholder=question.placeholder,
         is_required=question.is_required,
         is_active=question.is_active,
+        persist_annually=question.persist_annually,
         order_index=question.order_index,
         options=question.options,
         validation_rules=validation_rules_dict,
@@ -410,6 +420,8 @@ async def update_question(
         db_question.is_required = question.is_required
     if question.is_active is not None:
         db_question.is_active = question.is_active
+    if question.persist_annually is not None:
+        db_question.persist_annually = question.persist_annually
     if question.order_index is not None:
         db_question.order_index = question.order_index
     if question.options is not None:
@@ -495,6 +507,7 @@ async def duplicate_question(
         placeholder=original_question.placeholder,
         is_required=original_question.is_required,
         is_active=original_question.is_active,
+        persist_annually=original_question.persist_annually,
         order_index=original_question.order_index + 1,  # Place right after original
         options=original_question.options,
         validation_rules=original_question.validation_rules,

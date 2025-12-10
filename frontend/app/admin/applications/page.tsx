@@ -5,15 +5,59 @@
 
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/contexts/AuthContext'
 import { getAllApplications, ApplicationWithUser } from '@/lib/api-admin'
-import { acceptApplication } from '@/lib/api-admin-actions'
+import {
+  acceptApplication,
+  promoteToTier2,
+  addToWaitlist,
+  removeFromWaitlist,
+  deferApplication,
+  withdrawApplication,
+  rejectApplication
+} from '@/lib/api-admin-actions'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { formatDateCST } from '@/lib/date-utils'
-import { Hand } from 'lucide-react'
+import { Hand, ArrowUp, ArrowDown, ArrowUpDown, MoreHorizontal, Clock, ArrowRightCircle, XCircle, CalendarX } from 'lucide-react'
+
+// Sortable column keys
+type SortColumn = 'applicant' | 'camper' | 'status' | 'progress' | 'approvals' | 'created' | null
+type SortDirection = 'asc' | 'desc'
+
+// Status order for sorting (lower = earlier in sort)
+// Tier 1 statuses come first, then Tier 2, then Inactive
+const STATUS_ORDER: Record<string, number> = {
+  // Tier 1 (Applicant)
+  'not_started': 1,
+  'incomplete': 2,
+  'in_progress': 2,  // Legacy alias for incomplete
+  'complete': 3,
+  'under_review': 4,
+  'waitlist': 5,
+  // Tier 2 (Camper)
+  'tier2_incomplete': 6,
+  'accepted': 6,  // Legacy alias for tier2_incomplete
+  'unpaid': 7,
+  'paid': 8,
+  // Inactive
+  'deferred': 9,
+  'withdrawn': 10,
+  'rejected': 11,
+  'declined': 11,  // Legacy alias for rejected
+}
+
+// LocalStorage key for sort preference
+const SORT_STORAGE_KEY = 'admin-applications-sort'
 
 export default function AdminApplicationsPage() {
   const router = useRouter()
@@ -24,6 +68,37 @@ export default function AdminApplicationsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState<string>('')
   const [error, setError] = useState<string>('')
+
+  // Sorting state
+  const [sortColumn, setSortColumn] = useState<SortColumn>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+
+  // Load sort preference from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SORT_STORAGE_KEY)
+      if (saved) {
+        const { column, direction } = JSON.parse(saved)
+        if (column) setSortColumn(column)
+        if (direction) setSortDirection(direction)
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [])
+
+  // Save sort preference to localStorage when it changes
+  useEffect(() => {
+    try {
+      if (sortColumn) {
+        localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ column: sortColumn, direction: sortDirection }))
+      } else {
+        localStorage.removeItem(SORT_STORAGE_KEY)
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [sortColumn, sortDirection])
 
   // Check if user is admin
   useEffect(() => {
@@ -72,34 +147,77 @@ export default function AdminApplicationsPage() {
 
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
-      case 'in_progress':
+      // Tier 1 (Applicant)
+      case 'not_started':
+        return 'bg-gray-100 text-gray-800'
+      case 'incomplete':
+      case 'in_progress':  // Legacy
         return 'bg-blue-100 text-blue-800'
+      case 'complete':
+        return 'bg-indigo-100 text-indigo-800'
       case 'under_review':
         return 'bg-yellow-100 text-yellow-800'
-      case 'accepted':
-        return 'bg-green-100 text-green-800'
-      case 'declined':
-        return 'bg-red-100 text-red-800'
+      case 'waitlist':
+        return 'bg-orange-100 text-orange-800'
+      // Tier 2 (Camper)
+      case 'tier2_incomplete':
+      case 'accepted':  // Legacy
+        return 'bg-cyan-100 text-cyan-800'
+      case 'unpaid':
+        return 'bg-rose-100 text-rose-800'
       case 'paid':
-        return 'bg-purple-100 text-purple-800'
+        return 'bg-green-100 text-green-800'
+      // Inactive
+      case 'deferred':
+        return 'bg-slate-100 text-slate-600'
+      case 'withdrawn':
+        return 'bg-gray-100 text-gray-500'
+      case 'rejected':
+      case 'declined':  // Legacy
+        return 'bg-red-100 text-red-800'
       default:
         return 'bg-gray-100 text-gray-800'
     }
   }
 
   const formatStatus = (status: string) => {
-    return status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+    // Custom display names for clearer status labels
+    const statusDisplayNames: Record<string, string> = {
+      'not_started': 'Not Started',
+      'incomplete': 'In Progress',
+      'in_progress': 'In Progress',
+      'complete': 'Complete',
+      'under_review': 'Under Review',
+      'waitlist': 'Waitlist',
+      'tier2_incomplete': 'Tier 2 - Incomplete',
+      'accepted': 'Accepted',
+      'unpaid': 'Awaiting Payment',
+      'paid': 'Paid',
+      'deferred': 'Deferred',
+      'withdrawn': 'Withdrawn',
+      'rejected': 'Rejected',
+      'declined': 'Declined',
+    }
+    return statusDisplayNames[status] || status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
   }
 
-  const handleAcceptApplication = async (applicationId: string) => {
+  // Get tier badge for display
+  const getTierBadge = (tier: number) => {
+    if (tier === 2) {
+      return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 mr-2">Tier 2</span>
+    }
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 mr-2">Tier 1</span>
+  }
+
+  const handlePromoteToTier2 = async (applicationId: string) => {
     if (!token) return
 
-    if (!confirm('Are you sure you want to accept this application? This will notify the family and enable conditional post-acceptance sections.')) {
+    if (!confirm('Are you sure you want to promote this application to Tier 2? This will notify the family and enable additional post-acceptance sections.')) {
       return
     }
 
     try {
-      await acceptApplication(token, applicationId)
+      await promoteToTier2(token, applicationId)
 
       // Refresh both lists
       const [allData, filteredData] = await Promise.all([
@@ -109,12 +227,207 @@ export default function AdminApplicationsPage() {
       setAllApplications(allData)
       setApplications(filteredData)
 
-      alert('Application accepted successfully!')
+      alert('Application promoted to Tier 2 successfully!')
     } catch (err) {
-      console.error('Failed to accept application:', err)
-      alert(err instanceof Error ? err.message : 'Failed to accept application')
+      console.error('Failed to promote application:', err)
+      alert(err instanceof Error ? err.message : 'Failed to promote application')
     }
   }
+
+  // Legacy handler for backwards compatibility
+  const handleAcceptApplication = async (applicationId: string) => {
+    return handlePromoteToTier2(applicationId)
+  }
+
+  // Add to waitlist handler
+  const handleAddToWaitlist = async (applicationId: string) => {
+    if (!token) return
+
+    if (!confirm('Are you sure you want to add this application to the waitlist?')) {
+      return
+    }
+
+    try {
+      await addToWaitlist(token, applicationId)
+      const [allData, filteredData] = await Promise.all([
+        getAllApplications(token),
+        getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
+      ])
+      setAllApplications(allData)
+      setApplications(filteredData)
+      alert('Application added to waitlist')
+    } catch (err) {
+      console.error('Failed to add to waitlist:', err)
+      alert(err instanceof Error ? err.message : 'Failed to add to waitlist')
+    }
+  }
+
+  // Remove from waitlist handler
+  const handleRemoveFromWaitlist = async (applicationId: string, action: 'promote' | 'return_review') => {
+    if (!token) return
+
+    const actionText = action === 'promote' ? 'promote to Tier 2' : 'return to review'
+    if (!confirm(`Are you sure you want to ${actionText} this application?`)) {
+      return
+    }
+
+    try {
+      await removeFromWaitlist(token, applicationId, action)
+      const [allData, filteredData] = await Promise.all([
+        getAllApplications(token),
+        getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
+      ])
+      setAllApplications(allData)
+      setApplications(filteredData)
+      alert(action === 'promote' ? 'Application promoted to Tier 2' : 'Application returned to review')
+    } catch (err) {
+      console.error('Failed to remove from waitlist:', err)
+      alert(err instanceof Error ? err.message : 'Failed to remove from waitlist')
+    }
+  }
+
+  // Defer handler
+  const handleDeferApplication = async (applicationId: string) => {
+    if (!token) return
+
+    if (!confirm('Are you sure you want to defer this application to next year?')) {
+      return
+    }
+
+    try {
+      await deferApplication(token, applicationId)
+      const [allData, filteredData] = await Promise.all([
+        getAllApplications(token),
+        getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
+      ])
+      setAllApplications(allData)
+      setApplications(filteredData)
+      alert('Application deferred to next year')
+    } catch (err) {
+      console.error('Failed to defer application:', err)
+      alert(err instanceof Error ? err.message : 'Failed to defer application')
+    }
+  }
+
+  // Withdraw handler
+  const handleWithdrawApplication = async (applicationId: string) => {
+    if (!token) return
+
+    if (!confirm('Are you sure you want to withdraw this application?')) {
+      return
+    }
+
+    try {
+      await withdrawApplication(token, applicationId)
+      const [allData, filteredData] = await Promise.all([
+        getAllApplications(token),
+        getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
+      ])
+      setAllApplications(allData)
+      setApplications(filteredData)
+      alert('Application withdrawn')
+    } catch (err) {
+      console.error('Failed to withdraw application:', err)
+      alert(err instanceof Error ? err.message : 'Failed to withdraw application')
+    }
+  }
+
+  // Reject handler
+  const handleRejectApplication = async (applicationId: string) => {
+    if (!token) return
+
+    if (!confirm('Are you sure you want to reject this application? This action cannot be easily undone.')) {
+      return
+    }
+
+    try {
+      await rejectApplication(token, applicationId)
+      const [allData, filteredData] = await Promise.all([
+        getAllApplications(token),
+        getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
+      ])
+      setAllApplications(allData)
+      setApplications(filteredData)
+      alert('Application rejected')
+    } catch (err) {
+      console.error('Failed to reject application:', err)
+      alert(err instanceof Error ? err.message : 'Failed to reject application')
+    }
+  }
+
+  // Handle column header click for sorting
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      // Same column: toggle direction, or clear if already desc
+      if (sortDirection === 'asc') {
+        setSortDirection('desc')
+      } else {
+        // Clear sort
+        setSortColumn(null)
+        setSortDirection('asc')
+      }
+    } else {
+      // New column: set to asc
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  // Get sort icon for a column
+  const getSortIcon = (column: SortColumn) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="w-4 h-4 ml-1 opacity-40" />
+    }
+    return sortDirection === 'asc'
+      ? <ArrowUp className="w-4 h-4 ml-1 text-camp-green" />
+      : <ArrowDown className="w-4 h-4 ml-1 text-camp-green" />
+  }
+
+  // Sorted applications using useMemo for performance
+  const sortedApplications = useMemo(() => {
+    if (!sortColumn) return applications
+
+    return [...applications].sort((a, b) => {
+      let comparison = 0
+
+      switch (sortColumn) {
+        case 'applicant': {
+          const aName = `${a.user?.last_name || ''} ${a.user?.first_name || ''}`.toLowerCase()
+          const bName = `${b.user?.last_name || ''} ${b.user?.first_name || ''}`.toLowerCase()
+          comparison = aName.localeCompare(bName)
+          break
+        }
+        case 'camper': {
+          const aName = `${a.camper_last_name || ''} ${a.camper_first_name || ''}`.toLowerCase()
+          const bName = `${b.camper_last_name || ''} ${b.camper_first_name || ''}`.toLowerCase()
+          comparison = aName.localeCompare(bName)
+          break
+        }
+        case 'status': {
+          const aOrder = STATUS_ORDER[a.status] || 99
+          const bOrder = STATUS_ORDER[b.status] || 99
+          comparison = aOrder - bOrder
+          break
+        }
+        case 'progress': {
+          comparison = (a.completion_percentage || 0) - (b.completion_percentage || 0)
+          break
+        }
+        case 'approvals': {
+          comparison = (a.approval_count || 0) - (b.approval_count || 0)
+          break
+        }
+        case 'created': {
+          const aDate = new Date(a.created_at).getTime()
+          const bDate = new Date(b.created_at).getTime()
+          comparison = aDate - bDate
+          break
+        }
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison
+    })
+  }, [applications, sortColumn, sortDirection])
 
   if (loading && applications.length === 0) {
     return (
@@ -203,7 +516,7 @@ export default function AdminApplicationsPage() {
           <p className="text-gray-600">Here's an overview of all applications for this season.</p>
         </div>
 
-        {/* Stats Cards - ORDER: Total, In Progress, Under Review, Accepted */}
+        {/* Stats Cards - ORDER: Total, Tier 1 Active, Needs Review, Tier 2 / Paid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* 1. Total Applications */}
           <Card className="border-l-4 border-l-camp-green hover:shadow-lg transition-shadow">
@@ -222,14 +535,14 @@ export default function AdminApplicationsPage() {
             </CardContent>
           </Card>
 
-          {/* 2. In Progress */}
+          {/* 2. Tier 1 Active (not_started, incomplete, complete) */}
           <Card className="border-l-4 border-l-blue-500 hover:shadow-lg transition-shadow">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">In Progress</p>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Tier 1 Active</p>
                   <p className="text-3xl font-bold text-blue-600">
-                    {allApplications.filter(a => a.status === 'in_progress').length}
+                    {allApplications.filter(a => ['not_started', 'incomplete', 'in_progress', 'complete'].includes(a.status)).length}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -241,14 +554,14 @@ export default function AdminApplicationsPage() {
             </CardContent>
           </Card>
 
-          {/* 3. Under Review */}
+          {/* 3. Needs Review (under_review + waitlist) */}
           <Card className="border-l-4 border-l-yellow-500 hover:shadow-lg transition-shadow">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Under Review</p>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Needs Review</p>
                   <p className="text-3xl font-bold text-yellow-600">
-                    {allApplications.filter(a => a.status === 'under_review').length}
+                    {allApplications.filter(a => ['under_review', 'waitlist'].includes(a.status)).length}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
@@ -260,14 +573,17 @@ export default function AdminApplicationsPage() {
             </CardContent>
           </Card>
 
-          {/* 4. Accepted */}
+          {/* 4. Tier 2 / Paid (tier2_incomplete, unpaid, paid, accepted) */}
           <Card className="border-l-4 border-l-green-500 hover:shadow-lg transition-shadow">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Accepted</p>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Tier 2 / Paid</p>
                   <p className="text-3xl font-bold text-green-600">
-                    {allApplications.filter(a => a.status === 'accepted').length}
+                    {allApplications.filter(a => ['tier2_incomplete', 'accepted', 'unpaid', 'paid'].includes(a.status)).length}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {allApplications.filter(a => a.status === 'paid').length} paid
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -325,11 +641,23 @@ export default function AdminApplicationsPage() {
                   className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:border-camp-green focus:ring-2 focus:ring-camp-green/20 transition-colors bg-white"
                 >
                   <option value="">All Statuses</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="under_review">Under Review</option>
-                  <option value="accepted">Accepted</option>
-                  <option value="declined">Declined</option>
-                  <option value="paid">Paid</option>
+                  <optgroup label="Tier 1 (Applicant)">
+                    <option value="not_started">Not Started</option>
+                    <option value="incomplete">In Progress</option>
+                    <option value="complete">Complete</option>
+                    <option value="under_review">Under Review</option>
+                    <option value="waitlist">Waitlist</option>
+                  </optgroup>
+                  <optgroup label="Tier 2 (Camper)">
+                    <option value="tier2_incomplete">Tier 2 - Incomplete</option>
+                    <option value="unpaid">Awaiting Payment</option>
+                    <option value="paid">Paid</option>
+                  </optgroup>
+                  <optgroup label="Inactive">
+                    <option value="deferred">Deferred</option>
+                    <option value="withdrawn">Withdrawn</option>
+                    <option value="rejected">Rejected</option>
+                  </optgroup>
                 </select>
               </div>
             </div>
@@ -370,17 +698,65 @@ export default function AdminApplicationsPage() {
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr className="border-b-2 border-gray-200">
-                      <th className="text-left py-4 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider">Applicant</th>
-                      <th className="text-left py-4 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider">Camper</th>
-                      <th className="text-left py-4 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
-                      <th className="text-left py-4 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider">Progress</th>
-                      <th className="text-left py-4 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider">Approvals</th>
-                      <th className="text-left py-4 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider">Created</th>
+                      <th
+                        onClick={() => handleSort('applicant')}
+                        className="text-left py-4 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                      >
+                        <span className="flex items-center">
+                          Applicant
+                          {getSortIcon('applicant')}
+                        </span>
+                      </th>
+                      <th
+                        onClick={() => handleSort('camper')}
+                        className="text-left py-4 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                      >
+                        <span className="flex items-center">
+                          Camper
+                          {getSortIcon('camper')}
+                        </span>
+                      </th>
+                      <th
+                        onClick={() => handleSort('status')}
+                        className="text-left py-4 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                      >
+                        <span className="flex items-center">
+                          Status
+                          {getSortIcon('status')}
+                        </span>
+                      </th>
+                      <th
+                        onClick={() => handleSort('progress')}
+                        className="text-left py-4 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                      >
+                        <span className="flex items-center">
+                          Progress
+                          {getSortIcon('progress')}
+                        </span>
+                      </th>
+                      <th
+                        onClick={() => handleSort('approvals')}
+                        className="text-left py-4 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                      >
+                        <span className="flex items-center">
+                          Approvals
+                          {getSortIcon('approvals')}
+                        </span>
+                      </th>
+                      <th
+                        onClick={() => handleSort('created')}
+                        className="text-left py-4 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                      >
+                        <span className="flex items-center">
+                          Created
+                          {getSortIcon('created')}
+                        </span>
+                      </th>
                       <th className="text-left py-4 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-100">
-                    {applications.map((app) => (
+                    {sortedApplications.map((app) => (
                       <tr key={app.id} className="hover:bg-gray-50 transition-colors">
                         <td className="py-5 px-6">
                           <div>
@@ -452,25 +828,138 @@ export default function AdminApplicationsPage() {
                             >
                               👁️ View
                             </Button>
-                            {app.status === 'accepted' || app.status === 'paid' ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled
-                                className="font-medium whitespace-nowrap bg-green-50 text-green-700 border-green-200"
-                              >
-                                ✓ Accepted
-                              </Button>
-                            ) : (
+
+                            {/* Status-specific primary action */}
+                            {app.status === 'under_review' && (app.approval_count || 0) >= 3 && (
                               <Button
                                 variant="primary"
                                 size="sm"
-                                disabled={(app.approval_count || 0) < 3 || app.status !== 'under_review'}
-                                onClick={() => handleAcceptApplication(app.id)}
+                                onClick={() => handlePromoteToTier2(app.id)}
                                 className="font-medium whitespace-nowrap"
                               >
-                                ✓ Accept
+                                ✓ Promote
                               </Button>
+                            )}
+
+                            {app.status === 'waitlist' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => handleRemoveFromWaitlist(app.id, 'promote')}
+                                className="font-medium whitespace-nowrap"
+                              >
+                                ✓ Promote
+                              </Button>
+                            )}
+
+                            {/* Tier 2 statuses - show status indicator */}
+                            {(app.status === 'tier2_incomplete' || app.status === 'accepted') && (
+                              <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full bg-cyan-100 text-cyan-800">
+                                Tier 2
+                              </span>
+                            )}
+
+                            {app.status === 'unpaid' && (
+                              <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full bg-rose-100 text-rose-800">
+                                Awaiting Payment
+                              </span>
+                            )}
+
+                            {app.status === 'paid' && (
+                              <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                                ✓ Paid
+                              </span>
+                            )}
+
+                            {/* Inactive status indicators */}
+                            {app.status === 'deferred' && (
+                              <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-600">
+                                Deferred
+                              </span>
+                            )}
+
+                            {app.status === 'withdrawn' && (
+                              <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-500">
+                                Withdrawn
+                              </span>
+                            )}
+
+                            {(app.status === 'rejected' || app.status === 'declined') && (
+                              <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
+                                Rejected
+                              </span>
+                            )}
+
+                            {/* Dropdown menu for additional actions (only for non-terminal statuses) */}
+                            {!['paid', 'deferred', 'withdrawn', 'rejected', 'declined'].includes(app.status) && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48">
+                                  {/* Under Review actions */}
+                                  {app.status === 'under_review' && (
+                                    <>
+                                      <DropdownMenuItem
+                                        onClick={() => handleAddToWaitlist(app.id)}
+                                        className="cursor-pointer"
+                                      >
+                                        <Clock className="mr-2 h-4 w-4 text-orange-500" />
+                                        Add to Waitlist
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => handleRejectApplication(app.id)}
+                                        className="cursor-pointer text-red-600"
+                                      >
+                                        <XCircle className="mr-2 h-4 w-4" />
+                                        Reject
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                    </>
+                                  )}
+
+                                  {/* Waitlist actions */}
+                                  {app.status === 'waitlist' && (
+                                    <>
+                                      <DropdownMenuItem
+                                        onClick={() => handleRemoveFromWaitlist(app.id, 'return_review')}
+                                        className="cursor-pointer"
+                                      >
+                                        <ArrowRightCircle className="mr-2 h-4 w-4 text-blue-500" />
+                                        Return to Review
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                    </>
+                                  )}
+
+                                  {/* Tier 2 actions */}
+                                  {['tier2_incomplete', 'accepted', 'unpaid'].includes(app.status) && (
+                                    <>
+                                      <DropdownMenuItem
+                                        onClick={() => handleWithdrawApplication(app.id)}
+                                        className="cursor-pointer"
+                                      >
+                                        <XCircle className="mr-2 h-4 w-4 text-gray-500" />
+                                        Withdraw
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                    </>
+                                  )}
+
+                                  {/* Defer is available for most statuses */}
+                                  {['incomplete', 'in_progress', 'complete', 'under_review', 'waitlist', 'tier2_incomplete', 'accepted', 'unpaid'].includes(app.status) && (
+                                    <DropdownMenuItem
+                                      onClick={() => handleDeferApplication(app.id)}
+                                      className="cursor-pointer text-slate-600"
+                                    >
+                                      <CalendarX className="mr-2 h-4 w-4" />
+                                      Defer to Next Year
+                                    </DropdownMenuItem>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             )}
                           </div>
                         </td>
