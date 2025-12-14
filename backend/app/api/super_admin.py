@@ -11,7 +11,7 @@ from sqlalchemy import func, or_, and_
 from app.core.database import get_db
 from app.core.deps import get_current_super_admin_user
 from app.models.user import User
-from app.models.application import Application, ApplicationResponse, ApplicationQuestion
+from app.models.application import Application, ApplicationResponse, ApplicationQuestion, AdminNote
 from app.models.super_admin import SystemConfiguration, AuditLog, EmailTemplate, Team
 from app.schemas.super_admin import (
     SystemConfiguration as SystemConfigurationSchema,
@@ -738,35 +738,40 @@ async def perform_annual_reset(
     Perform annual reset of applications for the new camp season.
 
     This endpoint:
-    1. Resets all active applications to 'not_started' status
+    1. Resets all active applications to status='applicant', sub_status='not_started'
     2. Preserves responses for questions marked with persist_annually=True
-    3. Deletes all other responses
-    4. Resets approval tracking and timestamps
+    3. Deletes all other responses and admin notes
+    4. Resets approval tracking, timestamps, and payment tracking
     5. Logs the action for audit purposes
 
+    By default, paid campers ARE reset (since they're returning campers).
+    Use exclude_paid=True to skip campers who have paid.
     Use dry_run=True to preview changes without applying them.
     """
 
     # Determine archive year
     archive_year = reset_request.archive_year or datetime.now().year
 
-    # Define which statuses to skip (terminal states that shouldn't be reset)
-    skip_statuses = {'rejected', 'declined', 'withdrawn', 'deferred'}
-    if not reset_request.include_paid:
-        skip_statuses.add('paid')
-
-    # Get all applications grouped by status
+    # Get all applications
     all_applications = db.query(Application).all()
 
-    # Track skipped applications by status
+    # Track skipped applications by status/sub_status
     skipped_by_status = {}
     applications_to_reset = []
 
     for app in all_applications:
-        if app.status in skip_statuses:
-            skipped_by_status[app.status] = skipped_by_status.get(app.status, 0) + 1
-        else:
-            applications_to_reset.append(app)
+        # Skip inactive applications (deferred, withdrawn, rejected)
+        if app.status == 'inactive':
+            key = f"inactive/{app.sub_status}"
+            skipped_by_status[key] = skipped_by_status.get(key, 0) + 1
+            continue
+
+        # Skip paid campers if exclude_paid is True
+        if reset_request.exclude_paid and app.status == 'camper' and app.paid_invoice is True:
+            skipped_by_status['camper/paid'] = skipped_by_status.get('camper/paid', 0) + 1
+            continue
+
+        applications_to_reset.append(app)
 
     # Get all question IDs that should persist annually
     persistent_question_ids = set(
@@ -779,6 +784,7 @@ async def perform_annual_reset(
     application_results = []
     total_responses_deleted = 0
     total_responses_preserved = 0
+    total_notes_deleted = 0
 
     for app in applications_to_reset:
         camper_name = f"{app.camper_first_name or ''} {app.camper_last_name or ''}".strip() or "Unknown"
@@ -801,8 +807,15 @@ async def perform_annual_reset(
         responses_deleted_count = len(responses_to_delete)
         responses_preserved_count = len(responses_to_keep)
 
+        # Get admin notes for this application
+        notes = db.query(AdminNote).filter(
+            AdminNote.application_id == app.id
+        ).all()
+        notes_deleted_count = len(notes)
+
         total_responses_deleted += responses_deleted_count
         total_responses_preserved += responses_preserved_count
+        total_notes_deleted += notes_deleted_count
 
         # If not a dry run, actually make the changes
         if not reset_request.dry_run:
@@ -810,10 +823,21 @@ async def perform_annual_reset(
             for response in responses_to_delete:
                 db.delete(response)
 
-            # Reset application state
-            app.status = 'not_started'
-            app.tier = 1
+            # Delete admin notes (they're season-specific)
+            for note in notes:
+                db.delete(note)
+
+            # Reset application state using new status/sub_status system
+            app.status = 'applicant'
+            app.sub_status = 'not_started'
             app.completion_percentage = 0
+
+            # Reset payment tracking (paid_invoice becomes NULL for applicants)
+            app.paid_invoice = None
+            app.stripe_invoice_id = None
+
+            # Mark as returning camper since they had a previous application
+            app.is_returning_camper = True
 
             # Clear approval flags
             app.ops_approved = False
@@ -829,7 +853,7 @@ async def perform_annual_reset(
             # Clear timestamps (except created_at)
             app.completed_at = None
             app.under_review_at = None
-            app.promoted_to_tier2_at = None
+            app.promoted_to_camper_at = None
             app.waitlisted_at = None
             app.deferred_at = None
             app.withdrawn_at = None
@@ -846,7 +870,8 @@ async def perform_annual_reset(
             camper_name=camper_name,
             previous_status=previous_status,
             responses_deleted=responses_deleted_count,
-            responses_preserved=responses_preserved_count
+            responses_preserved=responses_preserved_count,
+            notes_deleted=notes_deleted_count
         ))
 
     # Commit changes if not a dry run
@@ -864,6 +889,7 @@ async def perform_annual_reset(
                 'applications_reset': len(applications_to_reset),
                 'responses_deleted': total_responses_deleted,
                 'responses_preserved': total_responses_preserved,
+                'notes_deleted': total_notes_deleted,
                 'skipped_statuses': skipped_by_status
             }
         )
@@ -876,6 +902,7 @@ async def perform_annual_reset(
         total_applications_processed=len(applications_to_reset),
         total_responses_deleted=total_responses_deleted,
         total_responses_preserved=total_responses_preserved,
+        total_notes_deleted=total_notes_deleted,
         applications_reset=application_results,
         skipped_statuses=skipped_by_status
     )
@@ -883,16 +910,20 @@ async def perform_annual_reset(
 
 @router.get("/annual-reset/preview", response_model=AnnualResetResult)
 async def preview_annual_reset(
-    include_paid: bool = False,
+    exclude_paid: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin_user)
 ):
     """
     Preview what the annual reset would do without making any changes.
     This is a convenience endpoint equivalent to POST with dry_run=True.
+
+    By default, paid applications ARE included in the reset preview
+    (since they're returning campers who need to reapply).
+    Set exclude_paid=True to skip paid applications.
     """
     return await perform_annual_reset(
-        AnnualResetRequest(dry_run=True, include_paid=include_paid),
+        AnnualResetRequest(dry_run=True, exclude_paid=exclude_paid),
         db=db,
         current_user=current_user
     )

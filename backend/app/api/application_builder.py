@@ -88,7 +88,7 @@ class SectionBase(BaseModel):
     order_index: int
     is_active: bool = True
     show_when_status: Optional[str] = None
-    tier: Optional[int] = None  # NULL=all tiers, 1=Tier 1 only, 2=Tier 2 only
+    required_status: Optional[str] = None  # NULL=all, 'applicant'=applicant only, 'camper'=camper only
 
 
 class SectionCreate(SectionBase):
@@ -101,7 +101,7 @@ class SectionUpdate(BaseModel):
     order_index: Optional[int] = None
     is_active: Optional[bool] = None
     show_when_status: Optional[str] = None
-    tier: Optional[int] = None
+    required_status: Optional[str] = None  # NULL=all, 'applicant', 'camper'
 
 
 class SectionWithQuestions(SectionBase):
@@ -170,7 +170,7 @@ def convert_section_to_response(section: ApplicationSection) -> dict:
         "order_index": section.order_index,
         "is_active": section.is_active,
         "show_when_status": section.show_when_status,
-        "tier": section.tier,
+        "required_status": section.required_status,  # NULL=all, 'applicant', 'camper'
         "created_at": section.created_at.isoformat(),
         "updated_at": section.updated_at.isoformat(),
         "questions": [convert_question_to_response(q) for q in section.questions],
@@ -261,7 +261,7 @@ async def create_section(
         order_index=section.order_index,
         is_active=section.is_active,
         show_when_status=show_when_status_value,
-        tier=section.tier
+        required_status=section.required_status  # NULL=all, 'applicant', 'camper'
     )
 
     db.add(new_section)
@@ -305,8 +305,8 @@ async def update_section(
         if show_when_status_value == 'always':
             show_when_status_value = None
         db_section.show_when_status = show_when_status_value
-    if section.tier is not None:
-        db_section.tier = section.tier
+    if section.required_status is not None:
+        db_section.required_status = section.required_status  # NULL=all, 'applicant', 'camper'
 
     db.commit()
     db.refresh(db_section)

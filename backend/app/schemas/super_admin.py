@@ -260,7 +260,7 @@ class BulkActionResult(BaseModel):
 class AnnualResetRequest(BaseModel):
     """Request for annual reset operation"""
     dry_run: bool = True  # If true, only report what would happen without making changes
-    include_paid: bool = False  # If true, also reset paid applications
+    exclude_paid: bool = False  # If true, skip paid applications (default: reset paid apps since they're returning campers)
     archive_year: Optional[int] = None  # Year to archive data as (defaults to current year)
 
 
@@ -271,6 +271,7 @@ class AnnualResetApplicationResult(BaseModel):
     previous_status: str
     responses_deleted: int
     responses_preserved: int
+    notes_deleted: int
 
 
 class AnnualResetResult(BaseModel):
@@ -280,5 +281,6 @@ class AnnualResetResult(BaseModel):
     total_applications_processed: int
     total_responses_deleted: int
     total_responses_preserved: int
+    total_notes_deleted: int
     applications_reset: List[AnnualResetApplicationResult]
     skipped_statuses: Dict[str, int]  # Count of applications skipped by status

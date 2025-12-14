@@ -47,7 +47,8 @@ async def get_application_sections(
     Returns sections in order with all active questions
     """
     # Get application status if application_id provided
-    app_status = None
+    app_status = None  # 'applicant', 'camper', 'inactive'
+    app_sub_status = None  # Progress within status
     if application_id:
         application = db.query(Application).filter(
             Application.id == application_id,
@@ -55,38 +56,45 @@ async def get_application_sections(
         ).first()
         if application:
             app_status = application.status
+            app_sub_status = application.sub_status
 
     # Build query for sections
     sections_query = db.query(ApplicationSection).filter(
         ApplicationSection.is_active == True
     )
 
-    # Filter sections by status if applicable
-    if app_status:
-        # Show sections that have no status requirement OR match the current status
+    # Filter sections by required_status (applicant vs camper)
+    if app_status == 'applicant':
+        # Applicants see sections with required_status=NULL or 'applicant'
+        sections_query = sections_query.filter(
+            (ApplicationSection.required_status == None) |
+            (ApplicationSection.required_status == 'applicant')
+        )
+    # Campers see all sections (no required_status filter)
+
+    # Filter sections by show_when_status (uses sub_status for conditional visibility)
+    if app_sub_status:
         sections_query = sections_query.filter(
             (ApplicationSection.show_when_status == None) |
-            (ApplicationSection.show_when_status == app_status)
+            (ApplicationSection.show_when_status == app_sub_status)
         )
     else:
-        # If no application or status, only show sections with no status requirement
+        # If no sub_status, only show sections with no status requirement
         sections_query = sections_query.filter(
             ApplicationSection.show_when_status == None
         )
 
     sections = sections_query.order_by(ApplicationSection.order_index).all()
 
-    # Filter questions within each section
-    if app_status:
+    # Filter questions within each section by show_when_status (uses sub_status)
+    if app_sub_status:
         for section in sections:
-            # Filter questions to only show those matching the status
             section.questions = [
                 q for q in section.questions
-                if q.is_active and (q.show_when_status is None or q.show_when_status == app_status)
+                if q.is_active and (q.show_when_status is None or q.show_when_status == app_sub_status)
             ]
     else:
         for section in sections:
-            # Only show questions with no status requirement
             section.questions = [
                 q for q in section.questions
                 if q.is_active and q.show_when_status is None
@@ -107,12 +115,13 @@ async def create_application(
     Users can create multiple applications (one per camper/child)
     """
 
-    # Create new application with 'not_started' status
+    # Create new application with 'applicant' status and 'not_started' sub_status
     application = Application(
         user_id=current_user.id,
         camper_first_name=application_data.camper_first_name,
         camper_last_name=application_data.camper_last_name,
-        status="not_started"
+        status="applicant",
+        sub_status="not_started"
     )
 
     db.add(application)
@@ -148,7 +157,7 @@ async def get_all_applications_admin(
     Admin-only: Get all applications with filtering and user information
 
     Query Parameters:
-    - status_filter: Filter by application status (in_progress, under_review, approved, etc.)
+    - status_filter: Filter by status in format "status:sub_status:payment" (e.g., "applicant", "applicant:under_review", "camper:complete:paid")
     - search: Search by camper name or user email
     """
     from sqlalchemy.orm import joinedload
@@ -159,9 +168,21 @@ async def get_all_applications_admin(
         joinedload(Application.approvals).joinedload(ApplicationApproval.admin)
     )
 
-    # Apply status filter
+    # Apply status filter with new format: "status:sub_status:payment"
     if status_filter:
-        query = query.filter(Application.status == status_filter)
+        parts = status_filter.split(':')
+        status = parts[0] if len(parts) > 0 else None
+        sub_status = parts[1] if len(parts) > 1 else None
+        payment = parts[2] if len(parts) > 2 else None
+
+        if status:
+            query = query.filter(Application.status == status)
+        if sub_status:
+            query = query.filter(Application.sub_status == sub_status)
+        if payment == 'paid':
+            query = query.filter(Application.paid_invoice == True)
+        elif payment == 'unpaid':
+            query = query.filter(Application.paid_invoice == False)
 
     # Apply search filter
     if search:
@@ -309,24 +330,24 @@ async def update_application(
     completion = calculate_completion_percentage(db, application_id)
     application.completion_percentage = completion
 
-    # Auto status transitions based on tiered status system
+    # Auto sub_status transitions based on status and progress
     current_status = application.status
-    current_tier = getattr(application, 'tier', 1) or 1
+    current_sub_status = application.sub_status
 
-    if current_tier == 1:
-        # Tier 1 transitions
-        if current_status == 'not_started' and completion > 0:
+    if current_status == 'applicant':
+        # Applicant transitions
+        if current_sub_status == 'not_started' and completion > 0:
             # First response → incomplete
-            application.status = 'incomplete'
-        elif current_status == 'incomplete' and completion == 100:
-            # 100% complete → complete (ready for review)
-            application.status = 'complete'
+            application.sub_status = 'incomplete'
+        elif current_sub_status == 'incomplete' and completion == 100:
+            # 100% complete → completed (ready for review)
+            application.sub_status = 'completed'
             application.completed_at = datetime.now(timezone.utc)
-    elif current_tier == 2:
-        # Tier 2 transitions
-        if current_status == 'tier2_incomplete' and completion == 100:
-            # Tier 2 100% complete → unpaid (ready for payment)
-            application.status = 'unpaid'
+    elif current_status == 'camper':
+        # Camper transitions
+        if current_sub_status == 'incomplete' and completion == 100:
+            # Camper 100% complete → complete (still needs payment separately)
+            application.sub_status = 'complete'
 
     db.commit()
     db.refresh(application)
@@ -388,18 +409,27 @@ async def get_application_progress(
         )
 
     # Get application status for conditional filtering
-    app_status = application.status
+    app_status = application.status  # 'applicant', 'camper', 'inactive'
+    app_sub_status = application.sub_status  # Progress within status
 
-    # Get sections filtered by status
+    # Get sections filtered by required_status and show_when_status
     sections_query = db.query(ApplicationSection).filter(
         ApplicationSection.is_active == True
     )
 
-    # Filter sections by status
-    if app_status:
+    # Filter sections by required_status (applicant vs camper)
+    if app_status == 'applicant':
+        sections_query = sections_query.filter(
+            (ApplicationSection.required_status == None) |
+            (ApplicationSection.required_status == 'applicant')
+        )
+    # Campers see all sections
+
+    # Filter sections by show_when_status (uses sub_status)
+    if app_sub_status:
         sections_query = sections_query.filter(
             (ApplicationSection.show_when_status == None) |
-            (ApplicationSection.show_when_status == app_status)
+            (ApplicationSection.show_when_status == app_sub_status)
         )
     else:
         sections_query = sections_query.filter(
@@ -432,17 +462,17 @@ async def get_application_progress(
     completed_sections = 0
 
     for section in sections:
-        # Get questions for this section, filtered by status
+        # Get questions for this section, filtered by sub_status
         questions_query = db.query(ApplicationQuestion).filter(
             ApplicationQuestion.section_id == section.id,
             ApplicationQuestion.is_active == True
         )
 
-        # Filter questions by status
-        if app_status:
+        # Filter questions by show_when_status (uses sub_status)
+        if app_sub_status:
             questions_query = questions_query.filter(
                 (ApplicationQuestion.show_when_status == None) |
-                (ApplicationQuestion.show_when_status == app_status)
+                (ApplicationQuestion.show_when_status == app_sub_status)
             )
         else:
             questions_query = questions_query.filter(
@@ -520,38 +550,38 @@ def calculate_completion_percentage(db: Session, application_id: str) -> int:
 
     This matches the progress endpoint calculation for consistency.
 
-    Tier filtering:
-    - Tier 1 users see: sections with tier=NULL or tier=1
-    - Tier 2 users see: all sections (tier=NULL, tier=1, tier=2)
+    Status filtering:
+    - Applicants see: sections with required_status=NULL or required_status='applicant'
+    - Campers see: all sections (required_status=NULL, 'applicant', or 'camper')
     """
-    # Get the application to check its status and tier
+    # Get the application to check its status
     application = db.query(Application).filter(Application.id == application_id).first()
     if not application:
         return 0
 
-    app_status = application.status
-    app_tier = getattr(application, 'tier', 1) or 1  # Default to tier 1
+    app_status = application.status  # 'applicant', 'camper', or 'inactive'
+    app_sub_status = application.sub_status
 
-    # Get sections filtered by tier and status
+    # Get sections filtered by required_status
     sections_query = db.query(ApplicationSection).filter(
         ApplicationSection.is_active == True
     )
 
-    # Filter sections by tier
-    # Tier 1: Show sections with tier=NULL or tier=1
-    # Tier 2: Show all sections (no tier filter needed)
-    if app_tier == 1:
+    # Filter sections by required_status
+    # Applicant: Show sections with required_status=NULL or required_status='applicant'
+    # Camper: Show all sections (no required_status filter needed)
+    if app_status == 'applicant':
         sections_query = sections_query.filter(
-            (ApplicationSection.tier == None) |
-            (ApplicationSection.tier == 1)
+            (ApplicationSection.required_status == None) |
+            (ApplicationSection.required_status == 'applicant')
         )
-    # For Tier 2, include all sections (no tier filter)
+    # For Camper/Inactive, include all sections (no required_status filter)
 
-    # Filter sections by status
-    if app_status:
+    # Filter sections by show_when_status (uses sub_status for conditional visibility)
+    if app_sub_status:
         sections_query = sections_query.filter(
             (ApplicationSection.show_when_status == None) |
-            (ApplicationSection.show_when_status == app_status)
+            (ApplicationSection.show_when_status == app_sub_status)
         )
     else:
         sections_query = sections_query.filter(
@@ -595,16 +625,17 @@ def calculate_completion_percentage(db: Session, application_id: str) -> int:
     completed_sections = 0
 
     for section in sections:
-        # Get questions for this section, filtered by status
+        # Get questions for this section, filtered by sub_status
         questions_query = db.query(ApplicationQuestion).filter(
             ApplicationQuestion.section_id == section.id,
             ApplicationQuestion.is_active == True
         )
 
-        if app_status:
+        # Filter questions by show_when_status (uses sub_status)
+        if app_sub_status:
             questions_query = questions_query.filter(
                 (ApplicationQuestion.show_when_status == None) |
-                (ApplicationQuestion.show_when_status == app_status)
+                (ApplicationQuestion.show_when_status == app_sub_status)
             )
         else:
             questions_query = questions_query.filter(

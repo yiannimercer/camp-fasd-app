@@ -10,8 +10,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/contexts/AuthContext'
 import { getAllApplications, ApplicationWithUser } from '@/lib/api-admin'
 import {
-  acceptApplication,
-  promoteToTier2,
+  promoteToCamper,
   addToWaitlist,
   removeFromWaitlist,
   deferApplication,
@@ -34,26 +33,28 @@ import { Hand, ArrowUp, ArrowDown, ArrowUpDown, MoreHorizontal, Clock, ArrowRigh
 type SortColumn = 'applicant' | 'camper' | 'status' | 'progress' | 'approvals' | 'created' | null
 type SortDirection = 'asc' | 'desc'
 
-// Status order for sorting (lower = earlier in sort)
-// Tier 1 statuses come first, then Tier 2, then Inactive
-const STATUS_ORDER: Record<string, number> = {
-  // Tier 1 (Applicant)
+// Sub-status order for sorting (lower = earlier in sort)
+// Applicant sub-statuses first, then Camper, then Inactive
+const SUB_STATUS_ORDER: Record<string, number> = {
+  // Applicant sub-statuses
   'not_started': 1,
   'incomplete': 2,
-  'in_progress': 2,  // Legacy alias for incomplete
-  'complete': 3,
+  'completed': 3,
   'under_review': 4,
   'waitlist': 5,
-  // Tier 2 (Camper)
-  'tier2_incomplete': 6,
-  'accepted': 6,  // Legacy alias for tier2_incomplete
-  'unpaid': 7,
-  'paid': 8,
-  // Inactive
-  'deferred': 9,
-  'withdrawn': 10,
-  'rejected': 11,
-  'declined': 11,  // Legacy alias for rejected
+  // Camper sub-statuses
+  'complete': 6,  // Note: Camper 'complete' vs Applicant 'completed'
+  // Inactive sub-statuses
+  'deferred': 7,
+  'withdrawn': 8,
+  'rejected': 9,
+}
+
+// Status order (main lifecycle phase)
+const STATUS_ORDER: Record<string, number> = {
+  'applicant': 1,
+  'camper': 2,
+  'inactive': 3,
 }
 
 // LocalStorage key for sort preference
@@ -145,79 +146,105 @@ export default function AdminApplicationsPage() {
     loadApplications()
   }, [token, statusFilter, searchTerm])
 
-  const getStatusBadgeColor = (status: string) => {
+  // Get badge color based on status and sub_status
+  const getStatusBadgeColor = (status: string, subStatus: string, paidInvoice?: boolean | null) => {
+    // Handle status-specific styling
     switch (status) {
-      // Tier 1 (Applicant)
-      case 'not_started':
-        return 'bg-gray-100 text-gray-800'
-      case 'incomplete':
-      case 'in_progress':  // Legacy
-        return 'bg-blue-100 text-blue-800'
-      case 'complete':
-        return 'bg-indigo-100 text-indigo-800'
-      case 'under_review':
-        return 'bg-yellow-100 text-yellow-800'
-      case 'waitlist':
-        return 'bg-orange-100 text-orange-800'
-      // Tier 2 (Camper)
-      case 'tier2_incomplete':
-      case 'accepted':  // Legacy
-        return 'bg-cyan-100 text-cyan-800'
-      case 'unpaid':
-        return 'bg-rose-100 text-rose-800'
-      case 'paid':
-        return 'bg-green-100 text-green-800'
-      // Inactive
-      case 'deferred':
-        return 'bg-slate-100 text-slate-600'
-      case 'withdrawn':
-        return 'bg-gray-100 text-gray-500'
-      case 'rejected':
-      case 'declined':  // Legacy
-        return 'bg-red-100 text-red-800'
+      case 'applicant':
+        switch (subStatus) {
+          case 'not_started':
+            return 'bg-gray-100 text-gray-800'
+          case 'incomplete':
+            return 'bg-blue-100 text-blue-800'
+          case 'completed':
+            return 'bg-indigo-100 text-indigo-800'
+          case 'under_review':
+            return 'bg-yellow-100 text-yellow-800'
+          case 'waitlist':
+            return 'bg-orange-100 text-orange-800'
+          default:
+            return 'bg-gray-100 text-gray-800'
+        }
+      case 'camper':
+        // For campers, check payment status
+        if (paidInvoice === true) {
+          return 'bg-green-100 text-green-800'  // Paid
+        } else if (subStatus === 'complete') {
+          return 'bg-rose-100 text-rose-800'  // Complete but unpaid
+        } else {
+          return 'bg-cyan-100 text-cyan-800'  // Incomplete
+        }
+      case 'inactive':
+        switch (subStatus) {
+          case 'deferred':
+            return 'bg-slate-100 text-slate-600'
+          case 'withdrawn':
+            return 'bg-gray-100 text-gray-500'
+          case 'rejected':
+            return 'bg-red-100 text-red-800'
+          default:
+            return 'bg-gray-100 text-gray-800'
+        }
       default:
         return 'bg-gray-100 text-gray-800'
     }
   }
 
-  const formatStatus = (status: string) => {
-    // Custom display names for clearer status labels
-    const statusDisplayNames: Record<string, string> = {
-      'not_started': 'Not Started',
-      'incomplete': 'In Progress',
-      'in_progress': 'In Progress',
-      'complete': 'Complete',
-      'under_review': 'Under Review',
-      'waitlist': 'Waitlist',
-      'tier2_incomplete': 'Tier 2 - Incomplete',
-      'accepted': 'Accepted',
-      'unpaid': 'Awaiting Payment',
-      'paid': 'Paid',
-      'deferred': 'Deferred',
-      'withdrawn': 'Withdrawn',
-      'rejected': 'Rejected',
-      'declined': 'Declined',
+  // Format status display based on status + sub_status + paid_invoice
+  const formatStatusDisplay = (status: string, subStatus: string, paidInvoice?: boolean | null) => {
+    switch (status) {
+      case 'applicant':
+        const applicantSubStatusNames: Record<string, string> = {
+          'not_started': 'Not Started',
+          'incomplete': 'In Progress',
+          'completed': 'Complete',
+          'under_review': 'Under Review',
+          'waitlist': 'Waitlist',
+        }
+        return applicantSubStatusNames[subStatus] || subStatus
+      case 'camper':
+        if (paidInvoice === true) {
+          return 'Camper - Paid'
+        } else if (subStatus === 'complete') {
+          return 'Camper - Awaiting Payment'
+        } else {
+          return 'Camper - Incomplete'
+        }
+      case 'inactive':
+        const inactiveSubStatusNames: Record<string, string> = {
+          'deferred': 'Deferred',
+          'withdrawn': 'Withdrawn',
+          'rejected': 'Rejected',
+        }
+        return inactiveSubStatusNames[subStatus] || subStatus
+      default:
+        return `${status} - ${subStatus}`
     }
-    return statusDisplayNames[status] || status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
   }
 
-  // Get tier badge for display
-  const getTierBadge = (tier: number) => {
-    if (tier === 2) {
-      return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 mr-2">Tier 2</span>
+  // Get status category badge (Applicant, Camper, Inactive)
+  const getStatusCategoryBadge = (status: string) => {
+    switch (status) {
+      case 'applicant':
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 mr-2">Applicant</span>
+      case 'camper':
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 mr-2">Camper</span>
+      case 'inactive':
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 mr-2">Inactive</span>
+      default:
+        return null
     }
-    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 mr-2">Tier 1</span>
   }
 
-  const handlePromoteToTier2 = async (applicationId: string) => {
+  const handlePromoteToCamper = async (applicationId: string) => {
     if (!token) return
 
-    if (!confirm('Are you sure you want to promote this application to Tier 2? This will notify the family and enable additional post-acceptance sections.')) {
+    if (!confirm('Are you sure you want to promote this application to Camper status? This will generate an invoice and enable additional post-acceptance sections.')) {
       return
     }
 
     try {
-      await promoteToTier2(token, applicationId)
+      await promoteToCamper(token, applicationId)
 
       // Refresh both lists
       const [allData, filteredData] = await Promise.all([
@@ -227,16 +254,11 @@ export default function AdminApplicationsPage() {
       setAllApplications(allData)
       setApplications(filteredData)
 
-      alert('Application promoted to Tier 2 successfully!')
+      alert('Application promoted to Camper successfully!')
     } catch (err) {
       console.error('Failed to promote application:', err)
       alert(err instanceof Error ? err.message : 'Failed to promote application')
     }
-  }
-
-  // Legacy handler for backwards compatibility
-  const handleAcceptApplication = async (applicationId: string) => {
-    return handlePromoteToTier2(applicationId)
   }
 
   // Add to waitlist handler
@@ -266,7 +288,7 @@ export default function AdminApplicationsPage() {
   const handleRemoveFromWaitlist = async (applicationId: string, action: 'promote' | 'return_review') => {
     if (!token) return
 
-    const actionText = action === 'promote' ? 'promote to Tier 2' : 'return to review'
+    const actionText = action === 'promote' ? 'promote to Camper' : 'return to review'
     if (!confirm(`Are you sure you want to ${actionText} this application?`)) {
       return
     }
@@ -279,7 +301,7 @@ export default function AdminApplicationsPage() {
       ])
       setAllApplications(allData)
       setApplications(filteredData)
-      alert(action === 'promote' ? 'Application promoted to Tier 2' : 'Application returned to review')
+      alert(action === 'promote' ? 'Application promoted to Camper' : 'Application returned to review')
     } catch (err) {
       console.error('Failed to remove from waitlist:', err)
       alert(err instanceof Error ? err.message : 'Failed to remove from waitlist')
@@ -404,9 +426,16 @@ export default function AdminApplicationsPage() {
           break
         }
         case 'status': {
-          const aOrder = STATUS_ORDER[a.status] || 99
-          const bOrder = STATUS_ORDER[b.status] || 99
-          comparison = aOrder - bOrder
+          // First sort by status (applicant, camper, inactive)
+          const aStatusOrder = STATUS_ORDER[a.status] || 99
+          const bStatusOrder = STATUS_ORDER[b.status] || 99
+          comparison = aStatusOrder - bStatusOrder
+          // If same status, sort by sub_status
+          if (comparison === 0) {
+            const aSubOrder = SUB_STATUS_ORDER[a.sub_status] || 99
+            const bSubOrder = SUB_STATUS_ORDER[b.sub_status] || 99
+            comparison = aSubOrder - bSubOrder
+          }
           break
         }
         case 'progress': {
@@ -516,7 +545,7 @@ export default function AdminApplicationsPage() {
           <p className="text-gray-600">Here's an overview of all applications for this season.</p>
         </div>
 
-        {/* Stats Cards - ORDER: Total, Tier 1 Active, Needs Review, Tier 2 / Paid */}
+        {/* Stats Cards - ORDER: Total, Applicants, Needs Review, Campers */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* 1. Total Applications */}
           <Card className="border-l-4 border-l-camp-green hover:shadow-lg transition-shadow">
@@ -535,14 +564,14 @@ export default function AdminApplicationsPage() {
             </CardContent>
           </Card>
 
-          {/* 2. Tier 1 Active (not_started, incomplete, complete) */}
+          {/* 2. Applicants (status='applicant' with active sub_statuses) */}
           <Card className="border-l-4 border-l-blue-500 hover:shadow-lg transition-shadow">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Tier 1 Active</p>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Applicants</p>
                   <p className="text-3xl font-bold text-blue-600">
-                    {allApplications.filter(a => ['not_started', 'incomplete', 'in_progress', 'complete'].includes(a.status)).length}
+                    {allApplications.filter(a => a.status === 'applicant' && ['not_started', 'incomplete', 'completed'].includes(a.sub_status)).length}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -554,14 +583,14 @@ export default function AdminApplicationsPage() {
             </CardContent>
           </Card>
 
-          {/* 3. Needs Review (under_review + waitlist) */}
+          {/* 3. Needs Review (status='applicant' with sub_status='under_review' or 'waitlist') */}
           <Card className="border-l-4 border-l-yellow-500 hover:shadow-lg transition-shadow">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">Needs Review</p>
                   <p className="text-3xl font-bold text-yellow-600">
-                    {allApplications.filter(a => ['under_review', 'waitlist'].includes(a.status)).length}
+                    {allApplications.filter(a => a.status === 'applicant' && ['under_review', 'waitlist'].includes(a.sub_status)).length}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
@@ -573,17 +602,17 @@ export default function AdminApplicationsPage() {
             </CardContent>
           </Card>
 
-          {/* 4. Tier 2 / Paid (tier2_incomplete, unpaid, paid, accepted) */}
+          {/* 4. Campers (status='camper') */}
           <Card className="border-l-4 border-l-green-500 hover:shadow-lg transition-shadow">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Tier 2 / Paid</p>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Campers</p>
                   <p className="text-3xl font-bold text-green-600">
-                    {allApplications.filter(a => ['tier2_incomplete', 'accepted', 'unpaid', 'paid'].includes(a.status)).length}
+                    {allApplications.filter(a => a.status === 'camper').length}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    {allApplications.filter(a => a.status === 'paid').length} paid
+                    {allApplications.filter(a => a.status === 'camper' && a.paid_invoice === true).length} paid
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -641,22 +670,25 @@ export default function AdminApplicationsPage() {
                   className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:border-camp-green focus:ring-2 focus:ring-camp-green/20 transition-colors bg-white"
                 >
                   <option value="">All Statuses</option>
-                  <optgroup label="Tier 1 (Applicant)">
-                    <option value="not_started">Not Started</option>
-                    <option value="incomplete">In Progress</option>
-                    <option value="complete">Complete</option>
-                    <option value="under_review">Under Review</option>
-                    <option value="waitlist">Waitlist</option>
+                  <optgroup label="Applicant">
+                    <option value="applicant">All Applicants</option>
+                    <option value="applicant:not_started">Not Started</option>
+                    <option value="applicant:incomplete">In Progress</option>
+                    <option value="applicant:completed">Complete</option>
+                    <option value="applicant:under_review">Under Review</option>
+                    <option value="applicant:waitlist">Waitlist</option>
                   </optgroup>
-                  <optgroup label="Tier 2 (Camper)">
-                    <option value="tier2_incomplete">Tier 2 - Incomplete</option>
-                    <option value="unpaid">Awaiting Payment</option>
-                    <option value="paid">Paid</option>
+                  <optgroup label="Camper">
+                    <option value="camper">All Campers</option>
+                    <option value="camper:incomplete">Camper - Incomplete</option>
+                    <option value="camper:complete:unpaid">Camper - Awaiting Payment</option>
+                    <option value="camper:complete:paid">Camper - Paid</option>
                   </optgroup>
                   <optgroup label="Inactive">
-                    <option value="deferred">Deferred</option>
-                    <option value="withdrawn">Withdrawn</option>
-                    <option value="rejected">Rejected</option>
+                    <option value="inactive">All Inactive</option>
+                    <option value="inactive:deferred">Deferred</option>
+                    <option value="inactive:withdrawn">Withdrawn</option>
+                    <option value="inactive:rejected">Rejected</option>
                   </optgroup>
                 </select>
               </div>
@@ -775,9 +807,12 @@ export default function AdminApplicationsPage() {
                           </div>
                         </td>
                         <td className="py-5 px-6">
-                          <span className={`inline-flex px-3 py-1.5 text-xs font-semibold rounded-full ${getStatusBadgeColor(app.status)}`}>
-                            {formatStatus(app.status)}
-                          </span>
+                          <div className="flex flex-col gap-1">
+                            {getStatusCategoryBadge(app.status)}
+                            <span className={`inline-flex px-3 py-1.5 text-xs font-semibold rounded-full ${getStatusBadgeColor(app.status, app.sub_status, app.paid_invoice)}`}>
+                              {formatStatusDisplay(app.status, app.sub_status, app.paid_invoice)}
+                            </span>
+                          </div>
                         </td>
                         <td className="py-5 px-6">
                           <div className="flex items-center gap-3">
@@ -830,18 +865,20 @@ export default function AdminApplicationsPage() {
                             </Button>
 
                             {/* Status-specific primary action */}
-                            {app.status === 'under_review' && (app.approval_count || 0) >= 3 && (
+                            {/* Applicant under_review with 3+ approvals can be promoted */}
+                            {app.status === 'applicant' && app.sub_status === 'under_review' && (app.approval_count || 0) >= 3 && (
                               <Button
                                 variant="primary"
                                 size="sm"
-                                onClick={() => handlePromoteToTier2(app.id)}
+                                onClick={() => handlePromoteToCamper(app.id)}
                                 className="font-medium whitespace-nowrap"
                               >
                                 ✓ Promote
                               </Button>
                             )}
 
-                            {app.status === 'waitlist' && (
+                            {/* Applicant on waitlist can be promoted */}
+                            {app.status === 'applicant' && app.sub_status === 'waitlist' && (
                               <Button
                                 variant="primary"
                                 size="sm"
@@ -852,46 +889,40 @@ export default function AdminApplicationsPage() {
                               </Button>
                             )}
 
-                            {/* Tier 2 statuses - show status indicator */}
-                            {(app.status === 'tier2_incomplete' || app.status === 'accepted') && (
-                              <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full bg-cyan-100 text-cyan-800">
-                                Tier 2
-                              </span>
-                            )}
-
-                            {app.status === 'unpaid' && (
+                            {/* Camper payment status indicators */}
+                            {app.status === 'camper' && app.paid_invoice !== true && (
                               <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full bg-rose-100 text-rose-800">
                                 Awaiting Payment
                               </span>
                             )}
 
-                            {app.status === 'paid' && (
+                            {app.status === 'camper' && app.paid_invoice === true && (
                               <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
                                 ✓ Paid
                               </span>
                             )}
 
                             {/* Inactive status indicators */}
-                            {app.status === 'deferred' && (
+                            {app.status === 'inactive' && app.sub_status === 'deferred' && (
                               <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-600">
                                 Deferred
                               </span>
                             )}
 
-                            {app.status === 'withdrawn' && (
+                            {app.status === 'inactive' && app.sub_status === 'withdrawn' && (
                               <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-500">
                                 Withdrawn
                               </span>
                             )}
 
-                            {(app.status === 'rejected' || app.status === 'declined') && (
+                            {app.status === 'inactive' && app.sub_status === 'rejected' && (
                               <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
                                 Rejected
                               </span>
                             )}
 
                             {/* Dropdown menu for additional actions (only for non-terminal statuses) */}
-                            {!['paid', 'deferred', 'withdrawn', 'rejected', 'declined'].includes(app.status) && (
+                            {!(app.status === 'inactive' || (app.status === 'camper' && app.paid_invoice === true)) && (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
@@ -900,7 +931,7 @@ export default function AdminApplicationsPage() {
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-48">
                                   {/* Under Review actions */}
-                                  {app.status === 'under_review' && (
+                                  {app.status === 'applicant' && app.sub_status === 'under_review' && (
                                     <>
                                       <DropdownMenuItem
                                         onClick={() => handleAddToWaitlist(app.id)}
@@ -921,7 +952,7 @@ export default function AdminApplicationsPage() {
                                   )}
 
                                   {/* Waitlist actions */}
-                                  {app.status === 'waitlist' && (
+                                  {app.status === 'applicant' && app.sub_status === 'waitlist' && (
                                     <>
                                       <DropdownMenuItem
                                         onClick={() => handleRemoveFromWaitlist(app.id, 'return_review')}
@@ -934,8 +965,8 @@ export default function AdminApplicationsPage() {
                                     </>
                                   )}
 
-                                  {/* Tier 2 actions */}
-                                  {['tier2_incomplete', 'accepted', 'unpaid'].includes(app.status) && (
+                                  {/* Camper actions (unpaid only) */}
+                                  {app.status === 'camper' && app.paid_invoice !== true && (
                                     <>
                                       <DropdownMenuItem
                                         onClick={() => handleWithdrawApplication(app.id)}
@@ -948,8 +979,8 @@ export default function AdminApplicationsPage() {
                                     </>
                                   )}
 
-                                  {/* Defer is available for most statuses */}
-                                  {['incomplete', 'in_progress', 'complete', 'under_review', 'waitlist', 'tier2_incomplete', 'accepted', 'unpaid'].includes(app.status) && (
+                                  {/* Defer is available for applicants and unpaid campers */}
+                                  {(app.status === 'applicant' || (app.status === 'camper' && app.paid_invoice !== true)) && (
                                     <DropdownMenuItem
                                       onClick={() => handleDeferApplication(app.id)}
                                       className="cursor-pointer text-slate-600"

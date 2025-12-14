@@ -19,8 +19,8 @@ class ApplicationSection(Base):
     order_index = Column(Integer, nullable=False)
     is_active = Column(Boolean, default=True, server_default="true")
     visible_before_acceptance = Column(Boolean, default=True, server_default="true")
-    show_when_status = Column(String(20), nullable=True)  # Status requirement for visibility
-    tier = Column(Integer, nullable=True)  # NULL=all tiers, 1=Tier 1 only, 2=Tier 2 only
+    show_when_status = Column(String(20), nullable=True)  # Sub-status requirement for visibility
+    required_status = Column(String(50), nullable=True)  # NULL=all, 'applicant'=applicant only, 'camper'=camper only
     created_at = Column(DateTime(timezone=True), server_default=text("NOW()"))
     updated_at = Column(DateTime(timezone=True), server_default=text("NOW()"), onupdate=text("NOW()"))
 
@@ -97,14 +97,16 @@ class Application(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     camper_first_name = Column(String(100))
     camper_last_name = Column(String(100))
-    status = Column(String(50), default="not_started", server_default="not_started")
+    status = Column(String(50), default="applicant", server_default="applicant")  # applicant, camper, inactive
+    sub_status = Column(String(50), default="not_started", server_default="not_started")  # Progress within status
     completion_percentage = Column(Integer, default=0, server_default="0")
     is_returning_camper = Column(Boolean, default=False, server_default="false")
     cabin_assignment = Column(String(50))
     application_data = Column(JSONB, default={}, server_default=text("'{}'::jsonb"))
 
-    # Tier system: 1 = Applicant, 2 = Camper (promoted)
-    tier = Column(Integer, default=1, server_default="1")
+    # Payment tracking
+    paid_invoice = Column(Boolean, nullable=True)  # NULL=no invoice, False=unpaid, True=paid
+    stripe_invoice_id = Column(String(255), nullable=True)  # Stripe invoice ID
 
     # Camper metadata for admin table
     camper_age = Column(Integer, nullable=True)
@@ -125,9 +127,9 @@ class Application(Base):
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=text("NOW()"))
     updated_at = Column(DateTime(timezone=True), server_default=text("NOW()"), onupdate=text("NOW()"))
-    completed_at = Column(DateTime(timezone=True))  # When Tier 1 reached 100%
-    under_review_at = Column(DateTime(timezone=True))  # When first admin approval received
-    promoted_to_tier2_at = Column(DateTime(timezone=True))  # When promoted to Tier 2
+    completed_at = Column(DateTime(timezone=True))  # When applicant reached 100%
+    under_review_at = Column(DateTime(timezone=True))  # When first admin action received
+    promoted_to_camper_at = Column(DateTime(timezone=True))  # When promoted to camper status
     waitlisted_at = Column(DateTime(timezone=True))  # When moved to waitlist
     deferred_at = Column(DateTime(timezone=True))  # When deferred
     withdrawn_at = Column(DateTime(timezone=True))  # When withdrawn

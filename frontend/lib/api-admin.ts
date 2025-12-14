@@ -19,21 +19,24 @@ export interface ApplicationWithUser {
   user?: UserInfo
   camper_first_name?: string
   camper_last_name?: string
-  status: string
+  status: string  // applicant, camper, inactive
+  sub_status: string  // not_started, incomplete, completed, under_review, waitlist, complete, deferred, withdrawn, rejected
   completion_percentage: number
   is_returning_camper: boolean
   cabin_assignment?: string
-  // Tier system
-  tier: number  // 1 = Applicant, 2 = Camper (promoted)
+  // Camper metadata
   camper_age?: number
   camper_gender?: string
   tuition_status?: string
+  // Payment tracking
+  paid_invoice?: boolean | null  // NULL=no invoice, false=unpaid, true=paid
+  stripe_invoice_id?: string | null
+  // Timestamps
   created_at: string
   updated_at: string
-  // Status timestamps
-  completed_at?: string  // When Tier 1 reached 100%
-  under_review_at?: string  // When first admin approval received
-  promoted_to_tier2_at?: string  // When promoted to Tier 2
+  completed_at?: string  // When applicant reached 100%
+  under_review_at?: string  // When first admin action received
+  promoted_to_camper_at?: string  // When promoted to camper status
   waitlisted_at?: string  // When moved to waitlist
   deferred_at?: string  // When deferred
   withdrawn_at?: string  // When withdrawn

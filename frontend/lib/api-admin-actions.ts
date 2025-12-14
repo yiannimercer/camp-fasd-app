@@ -149,41 +149,23 @@ export async function getApprovalStatus(
 }
 
 /**
- * Accept an application (legacy - redirects to promoteToTier2)
- * Kept for backwards compatibility
+ * Promote an application from Applicant to Camper status
+ * Requires 3 approvals from 3 different teams (unless super_admin bypass)
  */
-export async function acceptApplication(
+export async function promoteToCamper(
   token: string,
   applicationId: string
 ): Promise<{
   message: string
   application_id: string
-  tier: number
   status: string
+  sub_status: string
+  paid_invoice: boolean
   promoted_at: string
   approved_by_teams: string[]
   new_completion_percentage: number
 }> {
-  return promoteToTier2(token, applicationId)
-}
-
-/**
- * Promote an application from Tier 1 to Tier 2
- * Requires 3 approvals from 3 different teams
- */
-export async function promoteToTier2(
-  token: string,
-  applicationId: string
-): Promise<{
-  message: string
-  application_id: string
-  tier: number
-  status: string
-  promoted_at: string
-  approved_by_teams: string[]
-  new_completion_percentage: number
-}> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/applications/${applicationId}/promote-to-tier2`, {
+  const response = await fetch(`${API_BASE_URL}/api/admin/applications/${applicationId}/promote-to-camper`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -196,6 +178,44 @@ export async function promoteToTier2(
   }
 
   return response.json()
+}
+
+/**
+ * Legacy alias for promoteToCamper - kept for backwards compatibility
+ */
+export async function promoteToTier2(
+  token: string,
+  applicationId: string
+): Promise<{
+  message: string
+  application_id: string
+  status: string
+  sub_status: string
+  paid_invoice: boolean
+  promoted_at: string
+  approved_by_teams: string[]
+  new_completion_percentage: number
+}> {
+  return promoteToCamper(token, applicationId)
+}
+
+/**
+ * Legacy alias for promoteToCamper - kept for backwards compatibility
+ */
+export async function acceptApplication(
+  token: string,
+  applicationId: string
+): Promise<{
+  message: string
+  application_id: string
+  status: string
+  sub_status: string
+  paid_invoice: boolean
+  promoted_at: string
+  approved_by_teams: string[]
+  new_completion_percentage: number
+}> {
+  return promoteToCamper(token, applicationId)
 }
 
 /**

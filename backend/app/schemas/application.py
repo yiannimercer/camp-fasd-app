@@ -15,7 +15,7 @@ class ApplicationSectionBase(BaseModel):
     is_active: bool = True
     visible_before_acceptance: bool = True
     show_when_status: Optional[str] = None
-    tier: Optional[int] = None  # NULL=all tiers, 1=Tier 1 only, 2=Tier 2 only
+    required_status: Optional[str] = None  # NULL=all, 'applicant'=applicant only, 'camper'=camper only
 
 
 class ApplicationSection(ApplicationSectionBase):
@@ -110,20 +110,24 @@ class ApplicationUpdate(BaseModel):
 class Application(ApplicationBase):
     id: UUID4
     user_id: UUID4
-    status: str
+    status: str  # applicant, camper, inactive
+    sub_status: str  # not_started, incomplete, completed, under_review, waitlist, complete, deferred, withdrawn, rejected
     completion_percentage: int
     is_returning_camper: bool
     cabin_assignment: Optional[str] = None
-    tier: int = 1  # 1 = Applicant, 2 = Camper (promoted)
+    # Payment tracking
+    paid_invoice: Optional[bool] = None  # NULL=no invoice, False=unpaid, True=paid
+    stripe_invoice_id: Optional[str] = None
+    # Camper metadata
     camper_age: Optional[int] = None
     camper_gender: Optional[str] = None
     tuition_status: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     # Status timestamps
-    completed_at: Optional[datetime] = None  # When Tier 1 reached 100%
-    under_review_at: Optional[datetime] = None  # When first admin approval received
-    promoted_to_tier2_at: Optional[datetime] = None  # When promoted to Tier 2
+    completed_at: Optional[datetime] = None  # When applicant reached 100%
+    under_review_at: Optional[datetime] = None  # When first admin action received
+    promoted_to_camper_at: Optional[datetime] = None  # When promoted to camper status
     waitlisted_at: Optional[datetime] = None  # When moved to waitlist
     deferred_at: Optional[datetime] = None  # When deferred
     withdrawn_at: Optional[datetime] = None  # When withdrawn

@@ -45,18 +45,27 @@ async def get_application_progress_admin(
         )
 
     # Get application status for conditional filtering
-    app_status = application.status
+    app_status = application.status  # 'applicant', 'camper', 'inactive'
+    app_sub_status = application.sub_status  # Progress within status
 
-    # Get sections filtered by status
+    # Get sections filtered by required_status and show_when_status
     sections_query = db.query(ApplicationSection).filter(
         ApplicationSection.is_active == True
     )
 
-    # Filter sections by status
-    if app_status:
+    # Filter sections by required_status (applicant vs camper)
+    if app_status == 'applicant':
+        sections_query = sections_query.filter(
+            (ApplicationSection.required_status == None) |
+            (ApplicationSection.required_status == 'applicant')
+        )
+    # Campers see all sections
+
+    # Filter sections by show_when_status (uses sub_status)
+    if app_sub_status:
         sections_query = sections_query.filter(
             (ApplicationSection.show_when_status == None) |
-            (ApplicationSection.show_when_status == app_status)
+            (ApplicationSection.show_when_status == app_sub_status)
         )
     else:
         sections_query = sections_query.filter(
@@ -89,17 +98,17 @@ async def get_application_progress_admin(
     completed_sections = 0
 
     for section in sections:
-        # Get questions for this section, filtered by status
+        # Get questions for this section, filtered by sub_status
         questions_query = db.query(ApplicationQuestion).filter(
             ApplicationQuestion.section_id == section.id,
             ApplicationQuestion.is_active == True
         )
 
-        # Filter questions by status
-        if app_status:
+        # Filter questions by show_when_status (uses sub_status)
+        if app_sub_status:
             questions_query = questions_query.filter(
                 (ApplicationQuestion.show_when_status == None) |
-                (ApplicationQuestion.show_when_status == app_status)
+                (ApplicationQuestion.show_when_status == app_sub_status)
             )
         else:
             questions_query = questions_query.filter(
@@ -309,8 +318,8 @@ async def approve_application(
     """
     Approve an application (admin marks their approval)
     - Creates/updates approval record for this admin
-    - Auto-transitions 'complete' → 'under_review' on first approval
-    - 3 approvals enables the Promote to Tier 2 button
+    - Auto-transitions sub_status 'completed' → 'under_review' on first approval
+    - 3 approvals (or 1 super admin) enables the Promote to Camper button
     Admin-only endpoint
     """
     try:
@@ -348,9 +357,9 @@ async def approve_application(
             ApplicationApproval.approved == True
         ).count()
 
-        # Auto-transition 'complete' → 'under_review' on first approval
-        if application.status == 'complete' and approval_count == 1:
-            application.status = 'under_review'
+        # Auto-transition sub_status 'completed' → 'under_review' on first approval
+        if application.status == 'applicant' and application.sub_status == 'completed' and approval_count == 1:
+            application.sub_status = 'under_review'
             application.under_review_at = datetime.now(timezone.utc)
 
         db.commit()
@@ -360,8 +369,9 @@ async def approve_application(
             "message": "Application approved successfully",
             "application_id": str(application.id),
             "status": application.status,
+            "sub_status": application.sub_status,
             "approval_count": approval_count,
-            "promote_button_enabled": approval_count >= 3
+            "promote_button_enabled": approval_count >= 3 or current_user.role == 'super_admin'
         }
     except HTTPException:
         raise
@@ -454,25 +464,38 @@ async def accept_application(
     current_user: User = Depends(get_current_admin_user)
 ):
     """
-    Legacy endpoint - redirects to promote-to-tier2
+    Legacy endpoint - redirects to promote-to-camper
     Kept for backwards compatibility
     """
-    return await promote_to_tier2(application_id, db, current_user)
+    return await promote_to_camper(application_id, db, current_user)
 
 
 @router.post("/applications/{application_id}/promote-to-tier2")
-async def promote_to_tier2(
+async def promote_to_tier2_legacy(
     application_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
     """
-    Promote an application from Tier 1 to Tier 2
-    - Requires 3 approvals from 3 different teams
-    - Sets tier=2 and status='tier2_incomplete'
-    - Triggers Tier 2 sections to appear
+    Legacy endpoint - redirects to promote-to-camper
+    Kept for backwards compatibility
+    """
+    return await promote_to_camper(application_id, db, current_user)
+
+
+@router.post("/applications/{application_id}/promote-to-camper")
+async def promote_to_camper(
+    application_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """
+    Promote an application from Applicant to Camper status
+    - Requires 3 approvals from 3 different teams, OR 1 super admin can bypass
+    - Sets status='camper', sub_status='incomplete', paid_invoice=False
+    - Triggers Camper sections to appear
     - Recalculates completion percentage (may decrease due to new sections)
-    - Sends promotion email (TODO)
+    - Generates Stripe invoice immediately (TODO: Stripe integration)
     Admin/Super Admin only endpoint
     """
     try:
@@ -483,15 +506,21 @@ async def promote_to_tier2(
                 detail="Application not found"
             )
 
-        # Verify application is in a valid status for promotion
-        valid_statuses = ['under_review', 'waitlist']
-        if application.status not in valid_statuses:
+        # Verify application is an applicant in a valid sub_status for promotion
+        if application.status != 'applicant':
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Application must be 'under_review' or 'waitlist' to promote. Current status: {application.status}"
+                detail=f"Application must be 'applicant' status to promote. Current status: {application.status}"
             )
 
-        # Count approvals and verify 3 approvals from different teams
+        valid_sub_statuses = ['under_review', 'waitlist']
+        if application.sub_status not in valid_sub_statuses:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Application must have sub_status 'under_review' or 'waitlist' to promote. Current sub_status: {application.sub_status}"
+            )
+
+        # Count approvals and verify 3 approvals from different teams (unless super admin)
         approvals = db.query(ApplicationApproval).options(
             joinedload(ApplicationApproval.admin)
         ).filter(
@@ -500,46 +529,53 @@ async def promote_to_tier2(
         ).all()
 
         approval_count = len(approvals)
-        if approval_count < 3:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Application requires 3 approvals. Current approvals: {approval_count}"
-            )
-
-        # Verify approvals are from 3 different teams
         teams = set(a.admin.team for a in approvals if a.admin and a.admin.team)
-        if len(teams) < 3:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Application requires approvals from 3 different teams. Current teams: {', '.join(teams)}"
-            )
 
-        # Promote to Tier 2
-        application.tier = 2
-        application.status = 'tier2_incomplete'
-        application.promoted_to_tier2_at = datetime.now(timezone.utc)
+        # Super admin can bypass 3-approval requirement
+        if current_user.role != 'super_admin':
+            if approval_count < 3:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Application requires 3 approvals. Current approvals: {approval_count}"
+                )
+
+            # Verify approvals are from 3 different teams
+            if len(teams) < 3:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Application requires approvals from 3 different teams. Current teams: {', '.join(teams)}"
+                )
+
+        # Promote to Camper status
+        application.status = 'camper'
+        application.sub_status = 'incomplete'
+        application.paid_invoice = False  # Invoice generated, awaiting payment
+        application.promoted_to_camper_at = datetime.now(timezone.utc)
         # Keep legacy field for reference
         application.accepted_at = datetime.now(timezone.utc)
 
         db.commit()
         db.refresh(application)
 
-        # Recalculate progress - will now include Tier 2 sections
+        # Recalculate progress - will now include Camper sections
         from app.api.applications import calculate_completion_percentage
         new_progress = calculate_completion_percentage(db, application_id)
         application.completion_percentage = new_progress
         db.commit()
 
+        # TODO: Generate Stripe invoice here
         # TODO: Send promotion/acceptance email to family
 
         return {
-            "message": "Application promoted to Tier 2 - new sections now available",
+            "message": "Application promoted to Camper - new sections now available, invoice generated",
             "application_id": str(application.id),
-            "tier": application.tier,
             "status": application.status,
-            "promoted_at": application.promoted_to_tier2_at.isoformat(),
+            "sub_status": application.sub_status,
+            "paid_invoice": application.paid_invoice,
+            "promoted_at": application.promoted_to_camper_at.isoformat(),
             "approved_by_teams": list(teams),
-            "new_completion_percentage": new_progress
+            "new_completion_percentage": new_progress,
+            "super_admin_override": current_user.role == 'super_admin' and approval_count < 3
         }
     except HTTPException:
         raise
@@ -632,8 +668,8 @@ async def add_to_waitlist(
 ):
     """
     Move an application to the waitlist
-    - Can only be called from 'under_review' status
-    - Sets status='waitlist' and records timestamp
+    - Can only be called from 'under_review' sub_status
+    - Sets sub_status='waitlist' and records timestamp
     Admin-only endpoint
     """
     try:
@@ -644,13 +680,13 @@ async def add_to_waitlist(
                 detail="Application not found"
             )
 
-        if application.status != 'under_review':
+        if application.status != 'applicant' or application.sub_status != 'under_review':
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Application must be 'under_review' to add to waitlist. Current status: {application.status}"
+                detail=f"Application must be 'applicant/under_review' to add to waitlist. Current: {application.status}/{application.sub_status}"
             )
 
-        application.status = 'waitlist'
+        application.sub_status = 'waitlist'
         application.waitlisted_at = datetime.now(timezone.utc)
 
         db.commit()
@@ -660,6 +696,7 @@ async def add_to_waitlist(
             "message": "Application added to waitlist",
             "application_id": str(application.id),
             "status": application.status,
+            "sub_status": application.sub_status,
             "waitlisted_at": application.waitlisted_at.isoformat()
         }
     except HTTPException:
@@ -683,8 +720,8 @@ async def remove_from_waitlist(
 ):
     """
     Remove an application from the waitlist
-    - action='promote' → Promote directly to Tier 2 (requires 3 approvals)
-    - action='return_review' → Return to under_review status
+    - action='promote' → Promote directly to Camper (requires 3 approvals or super admin)
+    - action='return_review' → Return to under_review sub_status
     Admin-only endpoint
     """
     try:
@@ -695,18 +732,18 @@ async def remove_from_waitlist(
                 detail="Application not found"
             )
 
-        if application.status != 'waitlist':
+        if application.status != 'applicant' or application.sub_status != 'waitlist':
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Application must be on 'waitlist' to remove. Current status: {application.status}"
+                detail=f"Application must be 'applicant/waitlist' to remove. Current: {application.status}/{application.sub_status}"
             )
 
         if action == 'promote':
-            # Promote directly to Tier 2 (uses existing promote logic)
-            return await promote_to_tier2(application_id, db, current_user)
+            # Promote directly to Camper (uses existing promote logic)
+            return await promote_to_camper(application_id, db, current_user)
 
         elif action == 'return_review':
-            application.status = 'under_review'
+            application.sub_status = 'under_review'
             application.waitlisted_at = None  # Clear waitlist timestamp
 
             db.commit()
@@ -715,7 +752,8 @@ async def remove_from_waitlist(
             return {
                 "message": "Application returned to review",
                 "application_id": str(application.id),
-                "status": application.status
+                "status": application.status,
+                "sub_status": application.sub_status
             }
         else:
             raise HTTPException(
@@ -742,7 +780,7 @@ async def defer_application(
 ):
     """
     Defer an application to next year
-    - Sets status='deferred' and records timestamp
+    - Sets status='inactive', sub_status='deferred' and records timestamp
     - Can be done from most statuses
     Admin-only endpoint
     """
@@ -754,15 +792,20 @@ async def defer_application(
                 detail="Application not found"
             )
 
-        # Can't defer if already in a terminal inactive state
-        terminal_states = ['paid', 'rejected', 'withdrawn']
-        if application.status in terminal_states:
+        # Can't defer if already in inactive state or camper who has paid
+        if application.status == 'inactive':
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot defer application with status '{application.status}'"
+                detail=f"Cannot defer application already in inactive status ({application.sub_status})"
+            )
+        if application.status == 'camper' and application.paid_invoice == True:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot defer a camper who has already paid"
             )
 
-        application.status = 'deferred'
+        application.status = 'inactive'
+        application.sub_status = 'deferred'
         application.deferred_at = datetime.now(timezone.utc)
 
         db.commit()
@@ -772,6 +815,7 @@ async def defer_application(
             "message": "Application deferred to next year",
             "application_id": str(application.id),
             "status": application.status,
+            "sub_status": application.sub_status,
             "deferred_at": application.deferred_at.isoformat()
         }
     except HTTPException:
@@ -794,7 +838,7 @@ async def withdraw_application(
 ):
     """
     Withdraw an application
-    - Sets status='withdrawn' and records timestamp
+    - Sets status='inactive', sub_status='withdrawn' and records timestamp
     - Can be done from most statuses
     Admin-only endpoint
     """
@@ -806,15 +850,20 @@ async def withdraw_application(
                 detail="Application not found"
             )
 
-        # Can't withdraw if already in a terminal state
-        terminal_states = ['paid', 'rejected', 'deferred']
-        if application.status in terminal_states:
+        # Can't withdraw if already in inactive state or camper who has paid
+        if application.status == 'inactive':
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot withdraw application with status '{application.status}'"
+                detail=f"Cannot withdraw application already in inactive status ({application.sub_status})"
+            )
+        if application.status == 'camper' and application.paid_invoice == True:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot withdraw a camper who has already paid"
             )
 
-        application.status = 'withdrawn'
+        application.status = 'inactive'
+        application.sub_status = 'withdrawn'
         application.withdrawn_at = datetime.now(timezone.utc)
 
         db.commit()
@@ -824,6 +873,7 @@ async def withdraw_application(
             "message": "Application withdrawn",
             "application_id": str(application.id),
             "status": application.status,
+            "sub_status": application.sub_status,
             "withdrawn_at": application.withdrawn_at.isoformat()
         }
     except HTTPException:
@@ -846,8 +896,8 @@ async def reject_application(
 ):
     """
     Reject an application
-    - Sets status='rejected' and records timestamp
-    - Can only be done from Tier 1 statuses
+    - Sets status='inactive', sub_status='rejected' and records timestamp
+    - Can only be done from Applicant status (not Camper)
     Admin-only endpoint
     """
     try:
@@ -858,21 +908,21 @@ async def reject_application(
                 detail="Application not found"
             )
 
-        # Can only reject Tier 1 applications that haven't already been rejected
-        if application.tier == 2:
+        # Can only reject Applicant status applications
+        if application.status == 'camper':
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot reject an application that has already been promoted to Tier 2"
+                detail="Cannot reject an application that has already been promoted to Camper status"
             )
 
-        terminal_states = ['rejected', 'deferred', 'withdrawn']
-        if application.status in terminal_states:
+        if application.status == 'inactive':
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot reject application with status '{application.status}'"
+                detail=f"Cannot reject application already in inactive status ({application.sub_status})"
             )
 
-        application.status = 'rejected'
+        application.status = 'inactive'
+        application.sub_status = 'rejected'
         application.rejected_at = datetime.now(timezone.utc)
         # Keep legacy field for reference
         application.declined_at = datetime.now(timezone.utc)
@@ -886,6 +936,7 @@ async def reject_application(
             "message": "Application rejected",
             "application_id": str(application.id),
             "status": application.status,
+            "sub_status": application.sub_status,
             "rejected_at": application.rejected_at.isoformat()
         }
     except HTTPException:

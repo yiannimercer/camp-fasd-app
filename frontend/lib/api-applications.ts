@@ -12,6 +12,8 @@ export interface ApplicationSection {
   order_index: number
   is_active: boolean
   visible_before_acceptance: boolean
+  show_when_status: string | null  // Sub-status requirement for visibility
+  required_status: string | null   // NULL=all, 'applicant'=applicant only, 'camper'=camper only
   created_at: string
   updated_at: string
   questions: ApplicationQuestion[]
@@ -46,13 +48,25 @@ export interface Application {
   user_id: string
   camper_first_name: string | null
   camper_last_name: string | null
-  status: string
+  status: string  // applicant, camper, inactive
+  sub_status: string  // not_started, incomplete, completed, under_review, waitlist, complete, deferred, withdrawn, rejected
   completion_percentage: number
   is_returning_camper: boolean
   cabin_assignment: string | null
+  // Payment tracking
+  paid_invoice: boolean | null  // NULL=no invoice, false=unpaid, true=paid
+  stripe_invoice_id: string | null
+  // Timestamps
   created_at: string
   updated_at: string
   completed_at: string | null  // When application reached 100%
+  under_review_at: string | null  // When first admin action received
+  promoted_to_camper_at: string | null  // When promoted to camper status
+  waitlisted_at: string | null
+  deferred_at: string | null
+  withdrawn_at: string | null
+  rejected_at: string | null
+  paid_at: string | null
 }
 
 export interface ApplicationResponse {
