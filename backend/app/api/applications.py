@@ -165,7 +165,8 @@ async def get_all_applications_admin(
     query = db.query(Application).join(User, Application.user_id == User.id).options(
         joinedload(Application.user),
         joinedload(Application.responses),
-        joinedload(Application.approvals).joinedload(ApplicationApproval.admin)
+        joinedload(Application.approvals).joinedload(ApplicationApproval.admin),
+        joinedload(Application.notes)
     )
 
     # Apply status filter with new format: "status:sub_status:payment"
@@ -211,6 +212,9 @@ async def get_all_applications_admin(
         approvals = [a for a in app.approvals if a.approved]
         app_dict['approval_count'] = len(approvals)
         app_dict['approved_by_teams'] = [a.admin.team for a in approvals if a.admin and a.admin.team]
+
+        # Add note count
+        app_dict['note_count'] = len(app.notes) if app.notes else 0
 
         result.append(app_dict)
 
@@ -460,6 +464,7 @@ async def get_application_progress(
 
     section_progress_list = []
     completed_sections = 0
+    sections_with_requirements = 0  # Only count sections that have required questions
 
     for section in sections:
         # Get questions for this section, filtered by sub_status
@@ -507,16 +512,16 @@ async def get_application_progress(
         # Calculate section completion
         # ONLY required questions factor into completion - optional questions don't affect it
         if required_questions > 0:
+            sections_with_requirements += 1
             section_percentage = int((answered_required / required_questions) * 100)
             is_complete = answered_required == required_questions
+            if is_complete:
+                completed_sections += 1
         else:
-            # Section with NO required questions - always counts as "complete" for overall %
+            # Section with NO required questions - excluded from overall % calculation
             # The frontend will hide progress indicators for these sections entirely
-            section_percentage = 0  # 0% because there's nothing to track
-            is_complete = True  # Still counts as complete for overall calculation
-
-        if is_complete:
-            completed_sections += 1
+            section_percentage = 0  # 0% because there's nothing required to track
+            is_complete = True  # Visually shown as complete, but doesn't count toward %
 
         section_progress_list.append(SectionProgress(
             section_id=section.id,
@@ -529,9 +534,13 @@ async def get_application_progress(
             is_complete=is_complete
         ))
 
-    # Calculate overall percentage
+    # Calculate overall percentage based only on sections with required questions
+    # Formula: completed sections / sections with requirements * 100
     total_sections = len(sections)
-    overall_percentage = int((completed_sections / total_sections) * 100) if total_sections > 0 else 0
+    if sections_with_requirements == 0:
+        overall_percentage = 100  # No required questions anywhere = 100% complete
+    else:
+        overall_percentage = int((completed_sections / sections_with_requirements) * 100)
 
     return ApplicationProgress(
         application_id=application.id,
@@ -544,11 +553,13 @@ async def get_application_progress(
 
 def calculate_completion_percentage(db: Session, application_id: str) -> int:
     """
-    Calculate the completion percentage for an application
-    Based on COMPLETED SECTIONS / TOTAL SECTIONS
-    A section is complete when all its required questions are answered.
+    Calculate the completion percentage for an application.
 
-    This matches the progress endpoint calculation for consistency.
+    Formula: (sections 100% complete) / (sections with required questions) * 100
+
+    Only sections that have at least one required question count toward the percentage.
+    Sections with only optional questions are excluded from the calculation entirely.
+    A section is "100% complete" when ALL its required questions are answered.
 
     Status filtering:
     - Applicants see: sections with required_status=NULL or required_status='applicant'
@@ -621,7 +632,8 @@ def calculate_completion_percentage(db: Session, application_id: str) -> int:
         trigger_response = response_dict.get(str(question.show_if_question_id))
         return trigger_response == question.show_if_answer
 
-    # Count completed sections
+    # Count sections with required questions and how many are complete
+    sections_with_requirements = 0
     completed_sections = 0
 
     for section in sections:
@@ -649,20 +661,20 @@ def calculate_completion_percentage(db: Session, application_id: str) -> int:
 
         # Count required questions in this section
         required_questions = [q for q in visible_questions if q.is_required]
-        total_questions = len(visible_questions)
 
+        # Only count sections that have at least one required question
         if required_questions:
-            # Has required questions - complete when all required are answered
+            sections_with_requirements += 1
+            # Section is complete when ALL required questions are answered
             answered_required = sum(
                 1 for q in required_questions
                 if is_question_answered(str(q.id))
             )
             if answered_required == len(required_questions):
                 completed_sections += 1
-        else:
-            # No required questions - always counts as complete for overall percentage
-            # Optional questions don't block section completion
-            completed_sections += 1
+        # Sections with no required questions are excluded from calculation entirely
 
-    total_sections = len(sections)
-    return int((completed_sections / total_sections) * 100) if total_sections > 0 else 100
+    # Formula: completed sections / sections with requirements
+    if sections_with_requirements == 0:
+        return 100  # No required questions anywhere = 100% complete
+    return int((completed_sections / sections_with_requirements) * 100)

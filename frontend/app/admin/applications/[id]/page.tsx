@@ -7,6 +7,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { useAuth } from '@/lib/contexts/AuthContext'
 import { getApplicationAdmin, updateApplicationAdmin, getApplicationProgressAdmin } from '@/lib/api-admin'
 import { getApplicationSections, ApplicationSection, ApplicationProgress, SectionProgress } from '@/lib/api-applications'
@@ -456,13 +457,14 @@ export default function AdminApplicationDetailPage() {
                 Back
               </Button>
               <div className="flex items-center">
-                <div className="w-8 h-8 bg-camp-green rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">C</span>
-                </div>
-                <div className="ml-2">
-                  <h1 className="text-lg font-bold text-camp-green">CAMP FASD</h1>
-                  <p className="text-xs text-gray-500">Admin Portal</p>
-                </div>
+                <Image
+                  src="/camp-logo.png"
+                  alt="CAMP - A FASD Community"
+                  width={40}
+                  height={44}
+                  className="object-contain"
+                />
+                <p className="ml-2 text-xs text-gray-500 font-medium">Admin Portal</p>
               </div>
             </div>
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, Check } from 'lucide-react';
 
 export interface MedicationDose {
   id?: string;
@@ -39,6 +39,8 @@ interface MedicationListProps {
   medicationFields?: FieldConfig[];
   doseFields?: FieldConfig[];
   isRequired?: boolean;
+  noMedications?: boolean;
+  onNoMedicationsChange?: (value: boolean) => void;
 }
 
 const DEFAULT_MEDICATION_FIELDS: FieldConfig[] = [
@@ -108,7 +110,9 @@ export default function MedicationList({
   onChange,
   medicationFields = DEFAULT_MEDICATION_FIELDS,
   doseFields = DEFAULT_DOSE_FIELDS,
-  isRequired = false
+  isRequired = false,
+  noMedications = false,
+  onNoMedicationsChange
 }: MedicationListProps) {
   const [medications, setMedications] = useState<Medication[]>(() => {
     // Initialize with converted 12-hour format times
@@ -130,6 +134,7 @@ export default function MedicationList({
     return convertedMeds;
   });
   const [expandedMedications, setExpandedMedications] = useState<Set<number>>(new Set());
+  const [savedMedications, setSavedMedications] = useState<Set<number>>(new Set());
 
   // Sync with parent value changes and convert times to 12-hour format
   // Only update if the value prop has actually changed from external source
@@ -239,6 +244,21 @@ export default function MedicationList({
     setExpandedMedications(newExpanded);
   };
 
+  const saveMedication = (index: number) => {
+    // Trigger parent onChange to ensure save
+    onChange(medications);
+    // Show saved indicator
+    setSavedMedications(prev => new Set([...prev, index]));
+    // Clear saved indicator after 2 seconds
+    setTimeout(() => {
+      setSavedMedications(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(index);
+        return newSet;
+      });
+    }, 2000);
+  };
+
   const validateTimeFormat = (time: string): boolean => {
     if (!time || time.trim() === '' || time.toUpperCase() === 'N/A') return true;
     // Validate 12-hour format HH:MM (1:00 to 12:59)
@@ -297,26 +317,51 @@ export default function MedicationList({
 
   return (
     <div className="space-y-4">
+      {/* No Medications Checkbox */}
+      {onNoMedicationsChange && (
+        <label className="flex items-center gap-3 p-4 bg-gray-50 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+          <input
+            type="checkbox"
+            checked={noMedications}
+            onChange={(e) => {
+              onNoMedicationsChange(e.target.checked);
+              if (e.target.checked) {
+                // Clear medications when "no medications" is checked
+                setMedications([]);
+                onChange([]);
+              }
+            }}
+            className="w-5 h-5 text-camp-green border-2 border-gray-300 rounded focus:ring-camp-green focus:ring-2"
+          />
+          <span className="text-sm font-medium text-gray-700">
+            This camper does not take any medications
+          </span>
+        </label>
+      )}
+
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-gray-600">
-          {medications.length === 0 ? (
-            <span>No medications added yet</span>
-          ) : (
-            <span>{medications.length} medication{medications.length !== 1 ? 's' : ''} listed</span>
-          )}
+      {!noMedications && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-gray-600">
+            {medications.length === 0 ? (
+              <span>No medications added yet</span>
+            ) : (
+              <span>{medications.length} medication{medications.length !== 1 ? 's' : ''} listed</span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={addMedication}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-camp-green rounded-lg hover:bg-camp-green/90 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Add Medication
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={addMedication}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-camp-green rounded-lg hover:bg-camp-green/90 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Add Medication
-        </button>
-      </div>
+      )}
 
       {/* Medications List */}
+      {!noMedications && (
       <div className="space-y-4">
         {medications.map((medication, medIndex) => (
           <div key={medIndex} className="border-2 border-gray-300 rounded-lg overflow-hidden">
@@ -391,17 +436,22 @@ export default function MedicationList({
                     <button
                       type="button"
                       onClick={() => addDose(medIndex)}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-camp-green border-2 border-camp-green rounded-lg hover:bg-camp-green hover:text-white transition-colors"
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                        medication.doses.length === 0
+                          ? 'bg-camp-green text-white hover:bg-camp-green/90 shadow-sm'
+                          : 'text-camp-green border-2 border-camp-green hover:bg-camp-green hover:text-white'
+                      }`}
                     >
-                      <Plus className="h-3 w-3" />
+                      <Plus className="h-4 w-4" />
                       Add Dose
                     </button>
                   </div>
 
                   {/* Doses Table */}
                   {medication.doses.length === 0 ? (
-                    <div className="text-center py-6 text-sm text-gray-500 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-                      No doses scheduled. Click "Add Dose" to add a dose schedule.
+                    <div className="text-center py-6 text-sm bg-red-50 rounded-lg border-2 border-dashed border-red-300">
+                      <p className="text-red-600 font-medium">At least one dose schedule is required</p>
+                      <p className="text-red-500 text-xs mt-1">Click "Add Dose" to add a dose schedule</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -439,7 +489,7 @@ export default function MedicationList({
                                         type="text"
                                         value={dose.time || ''}
                                         onChange={(e) => updateDose(medIndex, doseIndex, 'time', e.target.value)}
-                                        placeholder="HH:MM"
+                                        placeholder="8:00"
                                         className={`flex-1 px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:border-camp-green focus:ring-2 focus:ring-camp-green/20 transition-colors ${
                                           dose.time && !validateTimeFormat(dose.time) ? 'border-red-500' : ''
                                         }`}
@@ -489,24 +539,63 @@ export default function MedicationList({
                     </div>
                   )}
                 </div>
+
+                {/* Save Medication Button */}
+                <div className="mt-6 pt-4 border-t border-gray-200 flex items-center justify-between">
+                  {medication.doses.length === 0 && (
+                    <p className="text-sm text-red-600">
+                      ⚠ Add at least one dose schedule to complete this medication
+                    </p>
+                  )}
+                  <div className={medication.doses.length === 0 ? '' : 'ml-auto'}>
+                    <button
+                      type="button"
+                      onClick={() => saveMedication(medIndex)}
+                      disabled={savedMedications.has(medIndex)}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                        savedMedications.has(medIndex)
+                          ? 'bg-green-100 text-green-700 cursor-default'
+                          : 'bg-camp-green text-white hover:bg-camp-green/90'
+                      }`}
+                    >
+                      {savedMedications.has(medIndex) ? (
+                        <>
+                          <Check className="h-4 w-4" />
+                          Saved!
+                        </>
+                      ) : (
+                        'Save Medication'
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
         ))}
       </div>
+      )}
 
-      {/* Empty State - Only show when there are no medications */}
-      {medications.length === 0 && (
+      {/* Empty State - Only show when there are no medications and "no meds" is not checked */}
+      {!noMedications && medications.length === 0 && (
         <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
           <p className="text-gray-600 mb-4">No medications listed</p>
           <p className="text-sm text-gray-500 mb-4">Click the button above to add your first medication</p>
         </div>
       )}
 
-      {/* Required Field Notice */}
-      {isRequired && medications.length === 0 && (
+      {/* Confirmed No Medications State */}
+      {noMedications && (
+        <div className="text-center py-8 border-2 border-green-200 rounded-lg bg-green-50">
+          <p className="text-green-700 font-medium">✓ Confirmed: No medications</p>
+          <p className="text-sm text-green-600 mt-1">This camper does not take any medications</p>
+        </div>
+      )}
+
+      {/* Required Field Notice - not shown if "no medications" is checked */}
+      {isRequired && !noMedications && medications.length === 0 && (
         <p className="text-sm text-red-600">
-          * At least one medication is required
+          * At least one medication is required, or check "no medications" above
         </p>
       )}
     </div>

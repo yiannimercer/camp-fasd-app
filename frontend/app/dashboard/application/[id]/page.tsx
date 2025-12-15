@@ -369,6 +369,8 @@ export default function ApplicationWizardPage() {
       })
 
       await updateApplication(token, applicationId, {
+        camper_first_name: camperFirstName || undefined,
+        camper_last_name: camperLastName || undefined,
         responses: responseArray
       })
 
@@ -940,7 +942,31 @@ export default function ApplicationWizardPage() {
         </header>
 
         {/* Questions */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <div className="flex-1 overflow-y-auto">
+          {/* Sticky Section Indicator - stays visible while scrolling */}
+          <div className="sticky top-0 z-20 bg-camp-green/95 backdrop-blur-sm text-white px-4 py-2 shadow-md">
+            <div className="max-w-3xl mx-auto flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium bg-white/20 px-2 py-0.5 rounded-full">
+                  Section {currentSectionIndex + 1}/{sections.length}
+                </span>
+                <span className="text-sm font-semibold">{currentSection?.title}</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                {getProgressPercentage(currentSection?.id) === 100 ? (
+                  <span className="flex items-center gap-1 bg-white/20 px-2 py-0.5 rounded-full">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Complete
+                  </span>
+                ) : (
+                  <span className="bg-white/20 px-2 py-0.5 rounded-full">
+                    {getProgressPercentage(currentSection?.id)}% done
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="p-4 sm:p-6 lg:p-8">
           <div className="max-w-3xl mx-auto">
             <Card className="shadow-lg border-0 ring-1 ring-gray-200/50 overflow-hidden">
               <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b border-gray-100 space-y-1">
@@ -1543,6 +1569,7 @@ export default function ApplicationWizardPage() {
                 </div>
               )}
             </div>
+          </div>
           </div>
         </div>
       </main>

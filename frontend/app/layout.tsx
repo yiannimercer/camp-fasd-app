@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { AuthProvider } from '@/lib/contexts/AuthContext'
+import { RoleBanner } from '@/components/RoleBanner'
 import FeedbackWidget from '@/components/FeedbackWidget'
 import '../styles/globals.css'
 
@@ -24,6 +25,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <GoogleOAuthProvider clientId={googleClientId}>
           <AuthProvider>
+            <RoleBanner />
             <FeedbackWidget>
               {children}
             </FeedbackWidget>

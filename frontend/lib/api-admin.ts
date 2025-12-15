@@ -45,6 +45,7 @@ export interface ApplicationWithUser {
   // Admin info
   approval_count?: number
   approved_by_teams?: string[]
+  note_count?: number
   responses?: Array<{
     id: string
     question_id: string

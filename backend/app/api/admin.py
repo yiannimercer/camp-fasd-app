@@ -270,6 +270,12 @@ async def create_note(
         note=note_data.note
     )
     db.add(note)
+
+    # Auto-transition sub_status 'completed' → 'under_review' on first admin action (note)
+    if application.status == 'applicant' and application.sub_status == 'completed':
+        application.sub_status = 'under_review'
+        application.under_review_at = datetime.now(timezone.utc)
+
     db.commit()
     db.refresh(note)
 
@@ -424,6 +430,11 @@ async def decline_application(
                 approved=False
             )
             db.add(decline)
+
+        # Auto-transition sub_status 'completed' → 'under_review' on first admin action (decline)
+        if application.status == 'applicant' and application.sub_status == 'completed':
+            application.sub_status = 'under_review'
+            application.under_review_at = datetime.now(timezone.utc)
 
         db.commit()
 
