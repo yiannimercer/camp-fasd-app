@@ -28,6 +28,8 @@ from app.schemas.application import (
     SectionProgress,
     ApplicationResponseCreate
 )
+from app.models.application import File as FileModel
+from app.services import storage_service
 
 router = APIRouter()
 
@@ -131,19 +133,147 @@ async def create_application(
     return application
 
 
-@router.get("", response_model=List[ApplicationSchema])
+@router.get("")
 async def get_my_applications(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     Get all applications for the current user
+
+    Includes profile_photo_url if the camper has uploaded a profile picture
     """
     applications = db.query(Application).filter(
         Application.user_id == current_user.id
     ).all()
 
-    return applications
+    if not applications:
+        return []
+
+    # Get all profile picture question IDs
+    profile_picture_questions = db.query(ApplicationQuestion.id).filter(
+        ApplicationQuestion.question_type == 'profile_picture',
+        ApplicationQuestion.is_active == True
+    ).all()
+    profile_picture_question_ids = [q.id for q in profile_picture_questions]
+
+    # Get application IDs
+    application_ids = [app.id for app in applications]
+
+    # Get all responses for profile picture questions across all user's applications
+    profile_responses = db.query(ApplicationResponse).filter(
+        ApplicationResponse.application_id.in_(application_ids),
+        ApplicationResponse.question_id.in_(profile_picture_question_ids),
+        ApplicationResponse.file_id != None
+    ).all()
+
+    # Build a map of application_id -> file_id
+    app_to_file_id = {resp.application_id: resp.file_id for resp in profile_responses}
+
+    # Get all file records at once
+    file_ids = list(set(app_to_file_id.values()))
+    if file_ids:
+        file_records = db.query(FileModel).filter(
+            FileModel.id.in_(file_ids)
+        ).all()
+        file_map = {f.id: f for f in file_records}
+    else:
+        file_map = {}
+
+    # Generate signed URLs and build response
+    results = []
+    for app in applications:
+        app_dict = ApplicationSchema.model_validate(app).model_dump()
+
+        # Add profile photo URL if available
+        file_id = app_to_file_id.get(app.id)
+        if file_id and file_id in file_map:
+            file_record = file_map[file_id]
+            try:
+                # Generate signed URL (valid for 1 hour)
+                signed_url = storage_service.get_signed_url(
+                    file_record.storage_path,
+                    expires_in=3600
+                )
+                app_dict['profile_photo_url'] = signed_url
+            except Exception as e:
+                # Log error but continue - profile photo is non-critical
+                print(f"Failed to get signed URL for profile photo: {e}")
+                app_dict['profile_photo_url'] = None
+        else:
+            app_dict['profile_photo_url'] = None
+
+        results.append(app_dict)
+
+    return results
+
+
+@router.get("/admin/sections", response_model=List[ApplicationSectionWithQuestions])
+async def get_application_sections_admin(
+    application_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """
+    Admin-only: Get all application sections for any application
+
+    Unlike the regular sections endpoint, this doesn't filter by user ownership
+    """
+    # Get application status (admin can view any application)
+    application = db.query(Application).filter(
+        Application.id == application_id
+    ).first()
+
+    if not application:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Application not found"
+        )
+
+    app_status = application.status
+    app_sub_status = application.sub_status
+
+    # Build query for sections
+    sections_query = db.query(ApplicationSection).filter(
+        ApplicationSection.is_active == True
+    )
+
+    # Filter sections by required_status (applicant vs camper)
+    if app_status == 'applicant':
+        sections_query = sections_query.filter(
+            (ApplicationSection.required_status == None) |
+            (ApplicationSection.required_status == 'applicant')
+        )
+    # Campers see all sections
+
+    # Filter sections by show_when_status
+    if app_sub_status:
+        sections_query = sections_query.filter(
+            (ApplicationSection.show_when_status == None) |
+            (ApplicationSection.show_when_status == app_sub_status)
+        )
+    else:
+        sections_query = sections_query.filter(
+            ApplicationSection.show_when_status == None
+        )
+
+    sections = sections_query.order_by(ApplicationSection.order_index).all()
+
+    # Filter questions within each section by show_when_status
+    if app_sub_status:
+        for section in sections:
+            section.questions = [
+                q for q in section.questions
+                if q.is_active and (q.show_when_status is None or q.show_when_status == app_sub_status)
+            ]
+    else:
+        for section in sections:
+            section.questions = [
+                q for q in section.questions
+                if q.is_active and q.show_when_status is None
+            ]
+
+    return sections
 
 
 @router.get("/admin/all")
@@ -161,6 +291,7 @@ async def get_all_applications_admin(
     - search: Search by camper name or user email
     """
     from sqlalchemy.orm import joinedload
+    from datetime import date
 
     query = db.query(Application).join(User, Application.user_id == User.id).options(
         joinedload(Application.user),
@@ -203,6 +334,19 @@ async def get_all_applications_admin(
 
     applications = query.all()
 
+    # Get question IDs for Legal Sex and Date of Birth to extract camper metadata
+    legal_sex_question = db.query(ApplicationQuestion.id).filter(
+        ApplicationQuestion.question_text == 'Legal Sex',
+        ApplicationQuestion.is_active == True
+    ).first()
+    dob_question = db.query(ApplicationQuestion.id).filter(
+        ApplicationQuestion.question_text == 'Date of Birth',
+        ApplicationQuestion.is_active == True
+    ).first()
+
+    legal_sex_qid = str(legal_sex_question.id) if legal_sex_question else None
+    dob_qid = str(dob_question.id) if dob_question else None
+
     # Convert to dict and add approval information
     result = []
     for app in applications:
@@ -215,6 +359,27 @@ async def get_all_applications_admin(
 
         # Add note count
         app_dict['note_count'] = len(app.notes) if app.notes else 0
+
+        # Extract camper_gender from Legal Sex response
+        if legal_sex_qid and app.responses:
+            for resp in app.responses:
+                if str(resp.question_id) == legal_sex_qid and resp.response_value:
+                    app_dict['camper_gender'] = resp.response_value
+                    break
+
+        # Extract and calculate camper_age from Date of Birth response
+        if dob_qid and app.responses:
+            for resp in app.responses:
+                if str(resp.question_id) == dob_qid and resp.response_value:
+                    try:
+                        # Parse the date (expected format: YYYY-MM-DD)
+                        dob = date.fromisoformat(resp.response_value)
+                        today = date.today()
+                        age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+                        app_dict['camper_age'] = age
+                    except (ValueError, TypeError):
+                        pass  # Invalid date format, skip
+                    break
 
         result.append(app_dict)
 

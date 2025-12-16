@@ -122,6 +122,8 @@ class Application(ApplicationBase):
     camper_age: Optional[int] = None
     camper_gender: Optional[str] = None
     tuition_status: Optional[str] = None
+    # Profile photo URL (pre-signed URL for displaying camper photo)
+    profile_photo_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     # Status timestamps

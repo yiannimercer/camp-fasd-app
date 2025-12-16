@@ -9,8 +9,8 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { useAuth } from '@/lib/contexts/AuthContext'
-import { getApplicationAdmin, updateApplicationAdmin, getApplicationProgressAdmin } from '@/lib/api-admin'
-import { getApplicationSections, ApplicationSection, ApplicationProgress, SectionProgress } from '@/lib/api-applications'
+import { getApplicationAdmin, updateApplicationAdmin, getApplicationProgressAdmin, getApplicationSectionsAdmin } from '@/lib/api-admin'
+import { ApplicationSection, ApplicationProgress, SectionProgress } from '@/lib/api-applications'
 import { getFile, FileInfo, uploadFile } from '@/lib/api-files'
 import { getAdminNotes, createAdminNote, approveApplication, declineApplication, getApprovalStatus, AdminNote } from '@/lib/api-admin-actions'
 import { Button } from '@/components/ui/button'
@@ -99,7 +99,7 @@ export default function AdminApplicationDetailPage() {
 
         const [appData, sectionsData, progressData] = await Promise.all([
           getApplicationAdmin(token, applicationId),
-          getApplicationSections(token, applicationId),
+          getApplicationSectionsAdmin(token, applicationId),
           getApplicationProgressAdmin(token, applicationId)
         ])
 

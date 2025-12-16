@@ -224,9 +224,20 @@ function ApplicationCard({
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className={`p-3 rounded-full ${config.bgColor}`}>
-              <User className={`h-6 w-6 ${config.color}`} />
-            </div>
+            {/* Profile Photo or Default Icon */}
+            {application.profile_photo_url ? (
+              <div className="h-12 w-12 rounded-full overflow-hidden border-2 border-white shadow-md">
+                <img
+                  src={application.profile_photo_url}
+                  alt={`${camperName}'s photo`}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+            ) : (
+              <div className={`p-3 rounded-full ${config.bgColor}`}>
+                <User className={`h-6 w-6 ${config.color}`} />
+              </div>
+            )}
             <div>
               <h3 className="font-bold text-lg text-camp-charcoal">{camperName}</h3>
               <div className={`flex items-center gap-1.5 text-sm ${config.color}`}>

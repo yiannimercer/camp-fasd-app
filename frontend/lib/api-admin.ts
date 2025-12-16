@@ -156,3 +156,25 @@ export async function getApplicationProgressAdmin(
 
   return response.json()
 }
+
+/**
+ * Get application sections (admin only)
+ * Unlike the regular endpoint, this doesn't filter by user ownership
+ */
+export async function getApplicationSectionsAdmin(
+  token: string,
+  applicationId: string
+): Promise<import('./api-applications').ApplicationSection[]> {
+  const response = await fetch(`${API_URL}/api/applications/admin/sections?application_id=${applicationId}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.detail || 'Failed to fetch application sections')
+  }
+
+  return response.json()
+}

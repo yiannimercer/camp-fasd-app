@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/contexts/AuthContext'
 import Link from 'next/link'
 import { Home, Users, UsersRound, FileEdit, Settings, Mail, ClipboardList, ClipboardCheck, LucideIcon } from 'lucide-react'
@@ -12,8 +12,8 @@ export default function SuperAdminLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
+  const pathname = usePathname()
   const { user, loading, logout } = useAuth()
-  const [activeSection, setActiveSection] = useState('dashboard')
 
   const handleSignOut = async () => {
     await logout()
@@ -141,7 +141,7 @@ export default function SuperAdminLayout({
           <div className="w-64 flex-shrink-0">
             <nav className="space-y-1">
               {navigation.map((item) => {
-                const isActive = typeof window !== 'undefined' && window.location.pathname === item.href
+                const isActive = pathname === item.href
                 const IconComponent = item.icon
                 return (
                   <Link
@@ -161,32 +161,6 @@ export default function SuperAdminLayout({
                 )
               })}
             </nav>
-
-            <div className="mt-8 p-4 bg-blue-50 rounded-lg">
-              <h3 className="text-sm font-semibold text-blue-900 mb-2">
-                Quick Actions
-              </h3>
-              <div className="space-y-2">
-                <Link
-                  href="/super-admin/users?role=admin"
-                  className="block text-xs text-blue-700 hover:text-blue-900"
-                >
-                  View All Admins
-                </Link>
-                <Link
-                  href="/super-admin/audit-logs?action=status_changed"
-                  className="block text-xs text-blue-700 hover:text-blue-900"
-                >
-                  Recent Status Changes
-                </Link>
-                <Link
-                  href="/super-admin/config?category=camp"
-                  className="block text-xs text-blue-700 hover:text-blue-900"
-                >
-                  Camp Settings
-                </Link>
-              </div>
-            </div>
           </div>
 
           {/* Main Content */}

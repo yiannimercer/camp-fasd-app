@@ -56,6 +56,8 @@ export interface Application {
   // Payment tracking
   paid_invoice: boolean | null  // NULL=no invoice, false=unpaid, true=paid
   stripe_invoice_id: string | null
+  // Profile photo (pre-signed URL for camper photo if uploaded)
+  profile_photo_url: string | null
   // Timestamps
   created_at: string
   updated_at: string

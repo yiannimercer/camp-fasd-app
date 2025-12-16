@@ -206,7 +206,7 @@ export default function AdminApplicationsPage() {
     }
   }
 
-  // Format status display based on status + sub_status + paid_invoice
+  // Format stage display (sub-status) based on status + sub_status + paid_invoice
   const formatStatusDisplay = (status: string, subStatus: string, paidInvoice?: boolean | null) => {
     switch (status) {
       case 'applicant':
@@ -219,12 +219,13 @@ export default function AdminApplicationsPage() {
         }
         return applicantSubStatusNames[subStatus] || subStatus
       case 'camper':
+        // For campers: Incomplete → Complete → Paid
         if (paidInvoice === true) {
-          return 'Camper - Paid'
+          return 'Paid'
         } else if (subStatus === 'complete') {
-          return 'Camper - Awaiting Payment'
+          return 'Awaiting Payment'
         } else {
-          return 'Camper - Incomplete'
+          return 'Incomplete'
         }
       case 'inactive':
         const inactiveSubStatusNames: Record<string, string> = {
@@ -234,7 +235,7 @@ export default function AdminApplicationsPage() {
         }
         return inactiveSubStatusNames[subStatus] || subStatus
       default:
-        return `${status} - ${subStatus}`
+        return subStatus
     }
   }
 
@@ -876,17 +877,20 @@ export default function AdminApplicationsPage() {
                       <th className="text-left py-4 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[90px]">
                         Type
                       </th>
-                      <th className="text-left py-4 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[80px]">
-                        Tuition
+                      <th className="text-left py-4 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[90px]">
+                        Paid Invoice
                       </th>
                       <th
                         onClick={() => handleSort('status')}
-                        className="text-left py-4 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none min-w-[130px]"
+                        className="text-left py-4 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none min-w-[100px]"
                       >
                         <span className="flex items-center">
                           Status
                           {getSortIcon('status')}
                         </span>
+                      </th>
+                      <th className="text-left py-4 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[120px]">
+                        Stage
                       </th>
                       <th
                         onClick={() => handleSort('progress')}
@@ -989,28 +993,29 @@ export default function AdminApplicationsPage() {
                             {app.is_returning_camper ? 'Returning' : 'New'}
                           </span>
                         </td>
-                        {/* Tuition (paid_invoice) */}
-                        <td className="py-4 px-4 min-w-[80px]">
-                          {app.paid_invoice === true ? (
+                        {/* Paid Invoice */}
+                        <td className="py-4 px-4 min-w-[90px]">
+                          {app.status === 'applicant' ? (
+                            <span className="text-gray-400 text-xs">N/A</span>
+                          ) : app.paid_invoice === true ? (
                             <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">
-                              Paid
-                            </span>
-                          ) : app.paid_invoice === false ? (
-                            <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-rose-100 text-rose-700">
-                              Unpaid
+                              ✓ Yes
                             </span>
                           ) : (
-                            <span className="text-gray-400 text-xs">N/A</span>
+                            <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-rose-100 text-rose-700">
+                              ✗ No
+                            </span>
                           )}
                         </td>
-                        {/* Status */}
-                        <td className="py-4 px-4 min-w-[130px]">
-                          <div className="flex flex-col gap-1">
-                            {getStatusCategoryBadge(app.status)}
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadgeColor(app.status, app.sub_status, app.paid_invoice)}`}>
-                              {formatStatusDisplay(app.status, app.sub_status, app.paid_invoice)}
-                            </span>
-                          </div>
+                        {/* Status - Just Applicant/Camper/Inactive */}
+                        <td className="py-4 px-4 min-w-[100px]">
+                          {getStatusCategoryBadge(app.status)}
+                        </td>
+                        {/* Stage - Sub-status */}
+                        <td className="py-4 px-4 min-w-[120px]">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadgeColor(app.status, app.sub_status, app.paid_invoice)}`}>
+                            {formatStatusDisplay(app.status, app.sub_status, app.paid_invoice)}
+                          </span>
                         </td>
                         {/* Progress */}
                         <td className="py-4 px-4 min-w-[140px]">
