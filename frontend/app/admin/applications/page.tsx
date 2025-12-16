@@ -6,7 +6,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import { useAuth } from '@/lib/contexts/AuthContext'
 import { getAllApplications, ApplicationWithUser } from '@/lib/api-admin'
@@ -65,6 +65,7 @@ const SORT_STORAGE_KEY = 'admin-applications-sort'
 
 export default function AdminApplicationsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { token, user, logout } = useAuth()
   const [applications, setApplications] = useState<ApplicationWithUser[]>([])
   const [allApplications, setAllApplications] = useState<ApplicationWithUser[]>([]) // For stats (unfiltered)
@@ -72,6 +73,14 @@ export default function AdminApplicationsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState<string>('')
   const [error, setError] = useState<string>('')
+
+  // Initialize filter from URL query params
+  useEffect(() => {
+    const urlStatus = searchParams.get('status')
+    if (urlStatus !== null) {
+      setStatusFilter(urlStatus)
+    }
+  }, [searchParams])
 
   // Sorting state
   const [sortColumn, setSortColumn] = useState<SortColumn>(null)

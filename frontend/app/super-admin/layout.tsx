@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/contexts/AuthContext'
 import Link from 'next/link'
-import { Home, Users, UsersRound, FileEdit, Settings, Mail, ClipboardList, LucideIcon } from 'lucide-react'
+import { Home, Users, UsersRound, FileEdit, Settings, Mail, ClipboardList, ClipboardCheck, LucideIcon } from 'lucide-react'
 
 export default function SuperAdminLayout({
   children,
@@ -47,6 +47,12 @@ export default function SuperAdminLayout({
       href: '/super-admin',
       icon: Home,
       section: 'dashboard',
+    },
+    {
+      name: 'Review Applications',
+      href: '/admin/applications',
+      icon: ClipboardCheck,
+      section: 'review',
     },
     {
       name: 'User Management',

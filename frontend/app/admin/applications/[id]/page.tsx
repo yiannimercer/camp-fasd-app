@@ -11,7 +11,7 @@ import Image from 'next/image'
 import { useAuth } from '@/lib/contexts/AuthContext'
 import { getApplicationAdmin, updateApplicationAdmin, getApplicationProgressAdmin } from '@/lib/api-admin'
 import { getApplicationSections, ApplicationSection, ApplicationProgress, SectionProgress } from '@/lib/api-applications'
-import { getFile, FileInfo } from '@/lib/api-files'
+import { getFile, FileInfo, uploadFile } from '@/lib/api-files'
 import { getAdminNotes, createAdminNote, approveApplication, declineApplication, getApprovalStatus, AdminNote } from '@/lib/api-admin-actions'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -64,8 +64,21 @@ export default function AdminApplicationDetailPage() {
   const [editingQuestion, setEditingQuestion] = useState<string | null>(null)
   const [editValue, setEditValue] = useState<string>('')
   const [saving, setSaving] = useState(false)
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const [editingFileQuestion, setEditingFileQuestion] = useState<string | null>(null)
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  // Missing questions navigator state
+  const [missingQuestions, setMissingQuestions] = useState<Array<{
+    questionId: string
+    questionText: string
+    sectionTitle: string
+    isRequired: boolean
+  }>>([])
+  const [currentMissingIndex, setCurrentMissingIndex] = useState<number>(-1)
+  const [highlightedQuestionId, setHighlightedQuestionId] = useState<string | null>(null)
+  const questionRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   // Check if user is admin
   useEffect(() => {
@@ -174,6 +187,70 @@ export default function AdminApplicationDetailPage() {
 
     loadApprovalStatus()
   }, [token, applicationId])
+
+  // Compute missing questions when data loads
+  useEffect(() => {
+    if (!sections.length || !application) return
+
+    const missing: Array<{
+      questionId: string
+      questionText: string
+      sectionTitle: string
+      isRequired: boolean
+    }> = []
+
+    const answeredQuestionIds = new Set(
+      application.responses?.map(r => r.question_id) || []
+    )
+
+    // Go through sections and questions in order
+    sections.forEach(section => {
+      section.questions
+        .filter(q => shouldShowQuestion(q))
+        .forEach(question => {
+          // Check if required question is unanswered
+          if (question.is_required && !answeredQuestionIds.has(question.id)) {
+            missing.push({
+              questionId: question.id,
+              questionText: question.question_text,
+              sectionTitle: section.title,
+              isRequired: true
+            })
+          }
+        })
+    })
+
+    setMissingQuestions(missing)
+    // Reset navigation index when missing questions change
+    setCurrentMissingIndex(-1)
+  }, [sections, application])
+
+  // Navigate to next missing question
+  const goToNextMissing = () => {
+    if (missingQuestions.length === 0) return
+
+    // Calculate next index (wrap around)
+    const nextIndex = currentMissingIndex < missingQuestions.length - 1
+      ? currentMissingIndex + 1
+      : 0
+
+    setCurrentMissingIndex(nextIndex)
+    const questionId = missingQuestions[nextIndex].questionId
+
+    // Scroll to the question
+    const element = questionRefs.current[questionId]
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+      // Highlight the question with animation
+      setHighlightedQuestionId(questionId)
+
+      // Remove highlight after animation
+      setTimeout(() => {
+        setHighlightedQuestionId(null)
+      }, 2000)
+    }
+  }
 
   const handleCreateNote = async () => {
     if (!token || !newNote.trim()) return
@@ -346,7 +423,88 @@ export default function AdminApplicationDetailPage() {
 
     // Regular text response
     if (response.response_value) {
-      return <span>{response.response_value}</span>
+      // Try to parse JSON for special display (medications, allergies, healthcare providers)
+      try {
+        const parsed = JSON.parse(response.response_value)
+
+        // Handle medication array
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].medication_name !== undefined) {
+          return (
+            <div className="space-y-3">
+              {parsed.map((med: any, idx: number) => (
+                <div key={idx} className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                  <div className="font-medium text-blue-900">{med.medication_name}</div>
+                  <div className="text-sm text-blue-700 mt-1 grid grid-cols-2 gap-1">
+                    <span>Strength: {med.strength || 'N/A'}</span>
+                    <span>Form: {med.dose_form || 'N/A'}</span>
+                    <span className="col-span-2">Dose: {med.dose_amount || 'N/A'}</span>
+                  </div>
+                  {med.doses && med.doses.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-blue-200">
+                      <div className="text-xs font-medium text-blue-800 mb-1">Schedule:</div>
+                      {med.doses.map((dose: any, dIdx: number) => (
+                        <div key={dIdx} className="text-xs text-blue-600">
+                          • {dose.given_type}{dose.time ? ` at ${dose.time} ${dose.time_period || ''}` : ''}{dose.notes ? ` (${dose.notes})` : ''}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+        }
+
+        // Handle allergy array
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].allergen !== undefined) {
+          return (
+            <div className="space-y-2">
+              {parsed.map((allergy: any, idx: number) => (
+                <div key={idx} className="bg-red-50 rounded-lg p-3 border border-red-200">
+                  <div className="font-medium text-red-900">{allergy.allergen}</div>
+                  <div className="text-sm text-red-700 mt-1">
+                    {allergy.reaction && <div>Reaction: {allergy.reaction}</div>}
+                    {allergy.severity && <div>Severity: {allergy.severity}</div>}
+                    {allergy.notes && <div className="italic">{allergy.notes}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        }
+
+        // Handle healthcare provider array
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].healthcare_provider_name !== undefined) {
+          return (
+            <div className="space-y-2">
+              {parsed.map((provider: any, idx: number) => (
+                <div key={idx} className="bg-green-50 rounded-lg p-3 border border-green-200">
+                  <div className="font-medium text-green-900">{provider.healthcare_provider_name}</div>
+                  <div className="text-sm text-green-700 mt-1">
+                    <div>Type: {provider.healthcare_provider_type || 'N/A'}</div>
+                    <div>Phone: {provider.healthcare_provider_phone || 'N/A'}</div>
+                    <div>May Contact: {provider.healthcare_provider_contact_consent || 'N/A'}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        }
+
+        // Handle JSON with value/detail structure
+        if (parsed.value !== undefined) {
+          return (
+            <span>
+              {parsed.value}
+              {parsed.detail && <span className="text-gray-500 ml-2">({parsed.detail})</span>}
+            </span>
+          )
+        }
+      } catch {
+        // Not JSON, return as-is
+      }
+
+      return <span className="whitespace-pre-wrap">{response.response_value}</span>
     }
 
     return <span className="text-gray-400">No response</span>
@@ -394,6 +552,52 @@ export default function AdminApplicationDetailPage() {
     }
   }
 
+  const handleFileUpload = async (questionId: string, file: File) => {
+    if (!token || !application) return
+
+    try {
+      setUploadingFile(true)
+
+      // Upload the file
+      const result = await uploadFile(token, file, applicationId, questionId)
+
+      // Reload the file info
+      const fileInfo = await getFile(token, result.file_id)
+      setFiles(prev => ({ ...prev, [questionId]: fileInfo }))
+
+      // Update the response to track the file_id
+      const updatedResponses = application.responses?.map(r =>
+        r.question_id === questionId
+          ? { ...r, file_id: result.file_id, response_value: undefined }
+          : r
+      ) || []
+
+      // If no existing response, add a new one
+      if (!updatedResponses.find(r => r.question_id === questionId)) {
+        updatedResponses.push({
+          id: result.file_id,
+          question_id: questionId,
+          file_id: result.file_id
+        })
+      }
+
+      setApplication({ ...application, responses: updatedResponses })
+      setEditingFileQuestion(null)
+
+      // Clear any previous errors for this question
+      setFileErrors(prev => {
+        const updated = { ...prev }
+        delete updated[questionId]
+        return updated
+      })
+    } catch (err) {
+      console.error('Failed to upload file:', err)
+      alert(err instanceof Error ? err.message : 'Failed to upload file')
+    } finally {
+      setUploadingFile(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -435,6 +639,38 @@ export default function AdminApplicationDetailPage() {
 
   const getSectionProgress = (sectionId: string): SectionProgress | undefined => {
     return progress?.section_progress.find(sp => sp.section_id === sectionId)
+  }
+
+  // Check if a question should be shown based on conditional logic
+  const shouldShowQuestion = (question: any): boolean => {
+    // If no conditional logic, always show
+    if (!question.show_if_question_id || !question.show_if_answer) {
+      return true
+    }
+
+    // Get the response to the trigger question
+    const triggerResponse = application?.responses?.find(
+      r => r.question_id === question.show_if_question_id
+    )
+
+    // If no trigger response, don't show conditional question
+    if (!triggerResponse?.response_value) {
+      return false
+    }
+
+    // Parse the response value (may be JSON with {value, detail} structure)
+    let responseValue = triggerResponse.response_value
+    try {
+      const parsed = JSON.parse(responseValue)
+      if (parsed.value) {
+        responseValue = parsed.value
+      }
+    } catch {
+      // Not JSON, use as-is
+    }
+
+    // Show if the trigger question has the expected answer
+    return responseValue === question.show_if_answer
   }
 
   return (
@@ -625,11 +861,21 @@ export default function AdminApplicationDetailPage() {
                     {section.questions.length === 0 ? (
                       <p className="text-gray-500 italic">No questions in this section</p>
                     ) : (
-                      section.questions.map((question, qIndex) => {
+                      section.questions
+                        .filter(shouldShowQuestion)
+                        .map((question, qIndex) => {
                         const value = getResponseValue(question.id)
 
                         return (
-                          <div key={question.id} className="pb-6 border-b border-gray-100 last:border-0">
+                          <div
+                            key={question.id}
+                            ref={(el) => { questionRefs.current[question.id] = el }}
+                            className={`pb-6 border-b border-gray-100 last:border-0 transition-all duration-300 rounded-lg ${
+                              highlightedQuestionId === question.id
+                                ? 'bg-amber-100 ring-2 ring-amber-400 ring-offset-2 animate-pulse p-4 -mx-4'
+                                : ''
+                            }`}
+                          >
                             <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
                               <div className="sm:w-1/3">
                                 <p className="font-medium text-gray-700">
@@ -673,10 +919,48 @@ export default function AdminApplicationDetailPage() {
                                     </Button>
                                   </div>
                                 </div>
-                              ) : (
+                              ) : editingFileQuestion === question.id ? (
+                                  // File upload editing UI
+                                  <div className="bg-gray-50 px-4 py-3 rounded-lg space-y-3">
+                                    <div className="text-sm text-gray-600 mb-2">
+                                      Upload a new file to replace the current one:
+                                    </div>
+                                    <input
+                                      type="file"
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0]
+                                        if (file) {
+                                          handleFileUpload(question.id, file)
+                                        }
+                                      }}
+                                      disabled={uploadingFile}
+                                      className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-camp-green file:text-white hover:file:bg-camp-green/90 file:cursor-pointer"
+                                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                                    />
+                                    <div className="flex gap-2">
+                                      {uploadingFile && (
+                                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                                          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                                          </svg>
+                                          Uploading...
+                                        </div>
+                                      )}
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => setEditingFileQuestion(null)}
+                                        disabled={uploadingFile}
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
                                 <div className="bg-gray-50 px-4 py-3 rounded-lg group relative">
                                   {value}
-                                  {question.question_type !== 'file' && (
+                                  {question.question_type !== 'file_upload' && question.question_type !== 'file' ? (
                                     <button
                                       onClick={() => {
                                         const response = application?.responses?.find(r => r.question_id === question.id)
@@ -685,6 +969,13 @@ export default function AdminApplicationDetailPage() {
                                       className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
                                     >
                                       ✏️ Edit
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => setEditingFileQuestion(question.id)}
+                                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
+                                    >
+                                      📎 Upload New
                                     </button>
                                   )}
                                 </div>
@@ -917,6 +1208,58 @@ export default function AdminApplicationDetailPage() {
         </Card>
         </main>
       </div>
+
+      {/* Floating Missing Questions Navigator */}
+      {missingQuestions.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <button
+            onClick={goToNextMissing}
+            className="flex items-center gap-3 px-5 py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-full shadow-lg hover:shadow-xl transition-all transform hover:scale-105 group"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <span>
+              {currentMissingIndex === -1
+                ? `${missingQuestions.length} Missing`
+                : `${currentMissingIndex + 1} of ${missingQuestions.length}`}
+            </span>
+            <svg
+              className="w-4 h-4 group-hover:translate-y-0.5 transition-transform"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 14l-7 7m0 0l-7-7m7 7V3"
+              />
+            </svg>
+          </button>
+          {currentMissingIndex >= 0 && (
+            <div className="mt-2 px-3 py-2 bg-white rounded-lg shadow-md text-sm max-w-xs">
+              <p className="text-gray-500 text-xs mb-1">
+                {missingQuestions[currentMissingIndex].sectionTitle}
+              </p>
+              <p className="text-gray-800 font-medium truncate">
+                {missingQuestions[currentMissingIndex].questionText}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

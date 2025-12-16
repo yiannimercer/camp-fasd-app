@@ -1,11 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/contexts/AuthContext'
 import { getDashboardStats, getTeamPerformance, type DashboardStats, type TeamPerformance } from '@/lib/api-super-admin'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 
 export default function SuperAdminDashboard() {
+  const router = useRouter()
   const { token } = useAuth()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [teamPerformance, setTeamPerformance] = useState<TeamPerformance[]>([])
@@ -64,6 +66,103 @@ export default function SuperAdminDashboard() {
         </p>
       </div>
 
+      {/* Applications Section */}
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Applications</h2>
+        <p className="text-sm text-gray-500 mb-4">Click any card to view filtered applications</p>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+          <Card
+            className="cursor-pointer hover:shadow-lg hover:border-gray-300 transition-all group"
+            onClick={() => router.push('/admin/applications?status=')}
+          >
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-gray-900 group-hover:text-camp-green transition-colors">{stats.total_applications}</div>
+              <div className="text-sm text-gray-600">Total (All Time)</div>
+              <div className="text-xs text-gray-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">View all →</div>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer hover:shadow-lg hover:border-blue-300 transition-all group"
+            onClick={() => router.push('/admin/applications?status=')}
+          >
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-blue-600 group-hover:text-blue-700 transition-colors">{stats.applications_this_season}</div>
+              <div className="text-sm text-gray-600">This Season</div>
+              <div className="text-xs text-blue-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">View all →</div>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer hover:shadow-lg hover:border-gray-400 transition-all group"
+            onClick={() => router.push('/admin/applications?status=applicant:incomplete')}
+          >
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-gray-600 group-hover:text-gray-800 transition-colors">{stats.applications_in_progress}</div>
+              <div className="text-sm text-gray-600">In Progress</div>
+              <div className="text-xs text-gray-400 mt-1">Family still filling out form</div>
+              <div className="text-xs text-gray-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">View in progress →</div>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer hover:shadow-lg hover:border-orange-300 transition-all group"
+            onClick={() => router.push('/admin/applications?status=applicant:under_review')}
+          >
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-orange-600 group-hover:text-orange-700 transition-colors">{stats.applications_under_review}</div>
+              <div className="text-sm text-gray-600">Under Review</div>
+              <div className="text-xs text-gray-400 mt-1">100% complete, awaiting approval</div>
+              <div className="text-xs text-orange-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">View pending reviews →</div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card
+            className="cursor-pointer hover:shadow-lg hover:border-green-300 transition-all group"
+            onClick={() => router.push('/admin/applications?status=camper')}
+          >
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-green-600 group-hover:text-green-700 transition-colors">{stats.applications_accepted}</div>
+              <div className="text-sm text-gray-600">Accepted</div>
+              <div className="text-xs text-gray-400 mt-1">Promoted to camper</div>
+              <div className="text-xs text-green-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">View campers →</div>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer hover:shadow-lg hover:border-purple-300 transition-all group"
+            onClick={() => router.push('/admin/applications?status=camper:complete:paid')}
+          >
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-purple-600 group-hover:text-purple-700 transition-colors">{stats.applications_paid}</div>
+              <div className="text-sm text-gray-600">Paid</div>
+              <div className="text-xs text-gray-400 mt-1">Tuition received</div>
+              <div className="text-xs text-purple-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">View paid campers →</div>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer hover:shadow-lg hover:border-amber-300 transition-all group"
+            onClick={() => router.push('/admin/applications?status=camper:complete:unpaid')}
+          >
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-amber-600 group-hover:text-amber-700 transition-colors">{stats.outstanding_payments}</div>
+              <div className="text-sm text-gray-600">Unpaid</div>
+              <div className="text-xs text-gray-400 mt-1">Accepted, awaiting payment</div>
+              <div className="text-xs text-amber-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">View unpaid →</div>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer hover:shadow-lg hover:border-red-300 transition-all group"
+            onClick={() => router.push('/admin/applications?status=inactive:rejected')}
+          >
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-red-600 group-hover:text-red-700 transition-colors">{stats.applications_declined}</div>
+              <div className="text-sm text-gray-600">Declined</div>
+              <div className="text-xs text-gray-400 mt-1">Application rejected</div>
+              <div className="text-xs text-red-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">View rejected →</div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
       {/* Users Section */}
       <div>
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Users</h2>
@@ -77,7 +176,8 @@ export default function SuperAdminDashboard() {
           <Card>
             <CardContent className="pt-6">
               <div className="text-2xl font-bold text-blue-600">{stats.total_families}</div>
-              <div className="text-sm text-gray-600">Families</div>
+              <div className="text-sm text-gray-600">Family Accounts</div>
+              <div className="text-xs text-gray-500 mt-1">Parent/guardian registrations</div>
             </CardContent>
           </Card>
           <Card>
@@ -93,58 +193,6 @@ export default function SuperAdminDashboard() {
               <div className="text-xs text-gray-500 mt-1">
                 +{stats.new_users_this_week} this week
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Applications Section */}
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Applications</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-gray-900">{stats.total_applications}</div>
-              <div className="text-sm text-gray-600">Total (All Time)</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-blue-600">{stats.applications_this_season}</div>
-              <div className="text-sm text-gray-600">This Season</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-gray-600">{stats.applications_in_progress}</div>
-              <div className="text-sm text-gray-600">In Progress</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-orange-600">{stats.applications_under_review}</div>
-              <div className="text-sm text-gray-600">Under Review</div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-green-600">{stats.applications_accepted}</div>
-              <div className="text-sm text-gray-600">Accepted</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-purple-600">{stats.applications_paid}</div>
-              <div className="text-sm text-gray-600">Paid</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-red-600">{stats.applications_declined}</div>
-              <div className="text-sm text-gray-600">Declined</div>
             </CardContent>
           </Card>
         </div>
