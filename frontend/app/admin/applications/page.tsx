@@ -253,30 +253,11 @@ export default function AdminApplicationsPage() {
     }
   }
 
-  // Approve application handler (adds this admin's approval)
+  // Approve application handler - now requires note, so redirect to detail page
   const handleApprove = async (applicationId: string) => {
-    if (!token) return
-
-    try {
-      const result = await approveApplication(token, applicationId)
-
-      // Refresh both lists
-      const [allData, filteredData] = await Promise.all([
-        getAllApplications(token),
-        getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
-      ])
-      setAllApplications(allData)
-      setApplications(filteredData)
-
-      if (result.auto_accepted) {
-        alert('Application approved and automatically promoted to Camper!')
-      } else {
-        alert(`Application approved! (${result.approval_count}/3 approvals)`)
-      }
-    } catch (err) {
-      console.error('Failed to approve application:', err)
-      alert(err instanceof Error ? err.message : 'Failed to approve application')
-    }
+    // Approving now requires a note - direct users to the detail page
+    alert('Approving or declining an application now requires adding a note. Please open the application detail page to approve using the Admin Panel.')
+    router.push(`/admin/applications/${applicationId}`)
   }
 
   // Open notes modal for an application

@@ -223,6 +223,7 @@ class ApplicationApproval(Base):
     application_id = Column(UUID(as_uuid=True), ForeignKey("applications.id", ondelete="CASCADE"), nullable=False)
     admin_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     approved = Column(Boolean, nullable=False)  # True = approve, False = decline
+    note = Column(Text, nullable=True)  # Required note explaining the decision
     created_at = Column(DateTime(timezone=True), server_default=text("NOW()"))
 
     # Relationships

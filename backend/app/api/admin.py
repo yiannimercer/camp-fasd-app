@@ -2,8 +2,9 @@
 Admin API routes for application management
 """
 
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Body
+from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 from datetime import datetime, timezone
 
@@ -15,6 +16,11 @@ from app.schemas.admin_note import AdminNote as AdminNoteSchema, AdminNoteCreate
 from app.schemas.application import ApplicationUpdate, Application as ApplicationSchema, ApplicationProgress
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+class ApprovalRequest(BaseModel):
+    """Request body for approving/declining an application"""
+    note: str  # Required note explaining the decision
 
 
 @router.get("/applications/{application_id}/progress", response_model=ApplicationProgress)
@@ -204,12 +210,13 @@ async def get_approval_status(
                 current_user_vote = "approved" if approval.approved else "declined"
                 break
 
-        # Get list of admins who approved/declined
+        # Get list of admins who approved/declined (including their notes)
         approved_by = [
             {
                 "admin_id": str(a.admin_id),
                 "name": f"{a.admin.first_name} {a.admin.last_name}" if a.admin else "Unknown",
-                "team": a.admin.team if a.admin else None
+                "team": a.admin.team if a.admin else None,
+                "note": a.note
             }
             for a in approvals if a.approved
         ]
@@ -218,7 +225,8 @@ async def get_approval_status(
             {
                 "admin_id": str(a.admin_id),
                 "name": f"{a.admin.first_name} {a.admin.last_name}" if a.admin else "Unknown",
-                "team": a.admin.team if a.admin else None
+                "team": a.admin.team if a.admin else None,
+                "note": a.note
             }
             for a in approvals if not a.approved
         ]
@@ -318,17 +326,24 @@ async def get_notes(
 @router.post("/applications/{application_id}/approve")
 async def approve_application(
     application_id: str,
+    request: ApprovalRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
     """
     Approve an application (admin marks their approval)
-    - Creates/updates approval record for this admin
+    - Creates/updates approval record for this admin with required note
     - Auto-transitions sub_status 'completed' → 'under_review' on first approval
     - 3 approvals (or 1 super admin) enables the Promote to Camper button
     Admin-only endpoint
     """
     try:
+        if not request.note or not request.note.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A note is required when approving an application"
+            )
+
         application = db.query(Application).filter(Application.id == application_id).first()
         if not application:
             raise HTTPException(
@@ -345,13 +360,15 @@ async def approve_application(
         if existing:
             # Update existing record
             existing.approved = True
+            existing.note = request.note.strip()
             existing.created_at = datetime.now(timezone.utc)  # Update timestamp
         else:
             # Create new approval record
             approval = ApplicationApproval(
                 application_id=application_id,
                 admin_id=current_user.id,
-                approved=True
+                approved=True,
+                note=request.note.strip()
             )
             db.add(approval)
 
@@ -394,17 +411,24 @@ async def approve_application(
 @router.post("/applications/{application_id}/decline")
 async def decline_application(
     application_id: str,
+    request: ApprovalRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
     """
     Decline an application (admin marks their decline)
-    - Creates/updates decline record for this admin
+    - Creates/updates decline record for this admin with required note
     - Does NOT change application status (status stays 'under_review')
     - Decline is tracked per-admin like approvals
     Admin-only endpoint
     """
     try:
+        if not request.note or not request.note.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A note is required when declining an application"
+            )
+
         application = db.query(Application).filter(Application.id == application_id).first()
         if not application:
             raise HTTPException(
@@ -421,13 +445,15 @@ async def decline_application(
         if existing:
             # Update existing record to declined
             existing.approved = False
+            existing.note = request.note.strip()
             existing.created_at = datetime.now(timezone.utc)
         else:
             # Create new decline record
             decline = ApplicationApproval(
                 application_id=application_id,
                 admin_id=current_user.id,
-                approved=False
+                approved=False,
+                note=request.note.strip()
             )
             db.add(decline)
 

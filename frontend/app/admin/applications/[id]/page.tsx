@@ -16,6 +16,7 @@ import { getAdminNotes, createAdminNote, approveApplication, declineApplication,
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDateCST } from '@/lib/date-utils'
+import AdminActionPanel from '@/components/admin/AdminActionPanel'
 
 interface ApplicationData {
   id: string
@@ -53,9 +54,10 @@ export default function AdminApplicationDetailPage() {
     approval_count: number
     decline_count: number
     current_user_vote: string | null
-    approved_by: Array<{ admin_id: string; name: string; team: string | null }>
-    declined_by: Array<{ admin_id: string; name: string; team: string | null }>
+    approved_by: Array<{ admin_id: string; name: string; team: string | null; note?: string }>
+    declined_by: Array<{ admin_id: string; name: string; team: string | null; note?: string }>
   } | null>(null)
+  const [showAdminPanel, setShowAdminPanel] = useState(false)
   const [newNote, setNewNote] = useState('')
   const [loading, setLoading] = useState(true)
   const [notesLoading, setNotesLoading] = useState(false)
@@ -68,6 +70,7 @@ export default function AdminApplicationDetailPage() {
   const [editingFileQuestion, setEditingFileQuestion] = useState<string | null>(null)
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const adminSectionRef = useRef<HTMLDivElement | null>(null)
 
   // Missing questions navigator state
   const [missingQuestions, setMissingQuestions] = useState<Array<{
@@ -268,12 +271,25 @@ export default function AdminApplicationDetailPage() {
     }
   }
 
-  const handleApprove = async () => {
+  // Handler for adding notes from the floating panel
+  const handleAddNoteFromPanel = async (noteText: string) => {
+    if (!token || !noteText.trim()) return
+
+    try {
+      const note = await createAdminNote(token, applicationId, { note: noteText })
+      setNotes([note, ...notes])
+    } catch (err) {
+      console.error('Failed to create note:', err)
+      throw err
+    }
+  }
+
+  const handleApprove = async (note: string) => {
     if (!token) return
 
     try {
       setActionLoading(true)
-      const result = await approveApplication(token, applicationId)
+      const result = await approveApplication(token, applicationId, note)
 
       // Reload approval status
       const status = await getApprovalStatus(token, applicationId)
@@ -283,33 +299,28 @@ export default function AdminApplicationDetailPage() {
       if (result.auto_accepted) {
         const updatedApp = await getApplicationAdmin(token, applicationId)
         setApplication(updatedApp as ApplicationData)
-        alert(`Application approved! With 3 approvals, status changed to 'Accepted'. This application is now eligible for final camper acceptance.`)
-      } else {
-        alert(`Application approved! (${result.approval_count}/3 approvals)`)
       }
     } catch (err) {
       console.error('Failed to approve application:', err)
-      alert(err instanceof Error ? err.message : 'Failed to approve application')
+      throw err
     } finally {
       setActionLoading(false)
     }
   }
 
-  const handleDecline = async () => {
+  const handleDecline = async (note: string) => {
     if (!token) return
 
     try {
       setActionLoading(true)
-      const result = await declineApplication(token, applicationId)
+      await declineApplication(token, applicationId, note)
 
       // Reload approval status
       const status = await getApprovalStatus(token, applicationId)
       setApprovalStatus(status)
-
-      alert(`Application declined. Current approvals: ${result.approval_count}, Declines: ${result.decline_count}`)
     } catch (err) {
       console.error('Failed to decline application:', err)
-      alert(err instanceof Error ? err.message : 'Failed to decline application')
+      throw err
     } finally {
       setActionLoading(false)
     }
@@ -637,6 +648,13 @@ export default function AdminApplicationDetailPage() {
     }
   }
 
+  const scrollToAdminSection = () => {
+    if (adminSectionRef.current) {
+      adminSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setActiveSectionId('admin')
+    }
+  }
+
   const getSectionProgress = (sectionId: string): SectionProgress | undefined => {
     return progress?.section_progress.find(sp => sp.section_id === sectionId)
   }
@@ -770,6 +788,35 @@ export default function AdminApplicationDetailPage() {
                   </button>
                 )
               })}
+            </div>
+
+            {/* Admin Section - Quick access to approval & notes */}
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <h3 className="text-sm font-semibold text-camp-charcoal mb-3">Admin Actions</h3>
+              <button
+                onClick={scrollToAdminSection}
+                className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors ${
+                  activeSectionId === 'admin'
+                    ? 'bg-camp-green text-white'
+                    : 'hover:bg-gray-100 text-gray-700 bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <svg className={`w-5 h-5 ${activeSectionId === 'admin' ? 'text-white' : 'text-camp-green'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <p className={`text-sm font-medium ${activeSectionId === 'admin' ? 'text-white' : 'text-gray-900'}`}>
+                      Approval & Notes
+                    </p>
+                    {approvalStatus && (
+                      <p className={`text-xs mt-0.5 ${activeSectionId === 'admin' ? 'text-white/80' : 'text-gray-500'}`}>
+                        {approvalStatus.approval_count}/3 approved
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </button>
             </div>
           </div>
         </aside>
@@ -1031,6 +1078,10 @@ export default function AdminApplicationDetailPage() {
         </Card>
 
         {/* Admin Approval Section */}
+        <div
+          ref={adminSectionRef}
+          className="scroll-mt-20"
+        >
         <Card className="mt-8 border-l-4 border-l-camp-green">
           <CardHeader>
             <CardTitle className="text-xl flex items-center gap-2">
@@ -1107,22 +1158,20 @@ export default function AdminApplicationDetailPage() {
               </div>
             )}
 
-            {/* Action Buttons */}
-            <div className="flex flex-wrap gap-4">
+            {/* Action Prompt */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-700 mb-3">
+                <strong>Note:</strong> Approving or declining requires adding a note explaining your decision.
+                Use the floating Admin Panel for all approval actions.
+              </p>
               <Button
-                onClick={handleApprove}
-                disabled={actionLoading || approvalStatus?.current_user_vote === 'approved'}
-                className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-2"
+                onClick={() => setShowAdminPanel(true)}
+                className="bg-camp-green hover:bg-camp-green/90 text-white font-semibold px-6 py-2 flex items-center gap-2"
               >
-                {actionLoading ? 'Processing...' : approvalStatus?.current_user_vote === 'approved' ? '✓ You Approved' : 'Approve Application'}
-              </Button>
-              <Button
-                onClick={handleDecline}
-                disabled={actionLoading || approvalStatus?.current_user_vote === 'declined'}
-                variant="outline"
-                className="border-red-600 text-red-600 hover:bg-red-50 font-semibold px-6 py-2"
-              >
-                {actionLoading ? 'Processing...' : approvalStatus?.current_user_vote === 'declined' ? '✗ You Declined' : 'Decline Application'}
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                Open Admin Panel to Approve/Decline
               </Button>
             </div>
           </CardContent>
@@ -1137,8 +1186,12 @@ export default function AdminApplicationDetailPage() {
               </svg>
               Team Notes
             </CardTitle>
-            <CardDescription>
-              Add notes about this application. Notes are visible to all admins.
+            <CardDescription className="space-y-1">
+              <span>Add notes about this application. Notes are visible to all admins.</span>
+              <span className="block text-xs text-gray-400 italic">
+                Use this section for general or additional notes beyond initial review feedback.
+                Examples: follow-up phone calls, updated information from family, post-review observations.
+              </span>
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1206,6 +1259,7 @@ export default function AdminApplicationDetailPage() {
             </div>
           </CardContent>
         </Card>
+        </div>
         </main>
       </div>
 
@@ -1259,6 +1313,30 @@ export default function AdminApplicationDetailPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Floating Admin Action Panel */}
+      {application && (
+        <AdminActionPanel
+          applicationId={applicationId}
+          applicationMeta={{
+            id: application.id,
+            status: application.status,
+            completion_percentage: application.completion_percentage,
+            created_at: application.created_at,
+            updated_at: application.updated_at,
+            completed_at: application.completed_at,
+            is_returning_camper: application.is_returning_camper,
+            cabin_assignment: application.cabin_assignment
+          }}
+          approvalStatus={approvalStatus}
+          notes={notes}
+          onApprove={handleApprove}
+          onDecline={handleDecline}
+          onAddNote={handleAddNoteFromPanel}
+          isOpen={showAdminPanel}
+          onOpenChange={setShowAdminPanel}
+        />
       )}
     </div>
   )

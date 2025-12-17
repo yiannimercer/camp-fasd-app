@@ -75,17 +75,20 @@ export async function getAdminNotes(
 }
 
 /**
- * Approve an application
+ * Approve an application (requires a note explaining the decision)
  */
 export async function approveApplication(
   token: string,
-  applicationId: string
+  applicationId: string,
+  note: string
 ): Promise<{ message: string; application_id: string; status: string; approval_count: number; auto_accepted: boolean }> {
   const response = await fetch(`${API_BASE_URL}/api/admin/applications/${applicationId}/approve`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
     },
+    body: JSON.stringify({ note }),
   })
 
   if (!response.ok) {
@@ -97,17 +100,20 @@ export async function approveApplication(
 }
 
 /**
- * Decline an application
+ * Decline an application (requires a note explaining the decision)
  */
 export async function declineApplication(
   token: string,
-  applicationId: string
+  applicationId: string,
+  note: string
 ): Promise<{ message: string; application_id: string; status: string; approval_count: number; decline_count: number }> {
   const response = await fetch(`${API_BASE_URL}/api/admin/applications/${applicationId}/decline`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
     },
+    body: JSON.stringify({ note }),
   })
 
   if (!response.ok) {
@@ -129,8 +135,8 @@ export async function getApprovalStatus(
   approval_count: number
   decline_count: number
   current_user_vote: string | null
-  approved_by: Array<{ admin_id: string; name: string; team: string | null }>
-  declined_by: Array<{ admin_id: string; name: string; team: string | null }>
+  approved_by: Array<{ admin_id: string; name: string; team: string | null; note?: string }>
+  declined_by: Array<{ admin_id: string; name: string; team: string | null; note?: string }>
   status: string
 }> {
   const response = await fetch(`${API_BASE_URL}/api/admin/applications/${applicationId}/approval-status`, {
