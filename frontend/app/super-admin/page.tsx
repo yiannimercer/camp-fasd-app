@@ -294,54 +294,6 @@ export default function SuperAdminDashboard() {
           </Card>
         </div>
       )}
-
-      {/* Quick Actions */}
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-            <CardContent className="pt-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0 bg-blue-100 rounded-lg p-3">
-                  <span className="text-2xl">👥</span>
-                </div>
-                <div className="ml-4">
-                  <div className="text-sm font-medium text-gray-900">Manage Users</div>
-                  <div className="text-xs text-gray-500">View and edit all users</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-            <CardContent className="pt-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0 bg-green-100 rounded-lg p-3">
-                  <span className="text-2xl">⚙️</span>
-                </div>
-                <div className="ml-4">
-                  <div className="text-sm font-medium text-gray-900">System Settings</div>
-                  <div className="text-xs text-gray-500">Configure camp settings</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-            <CardContent className="pt-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0 bg-purple-100 rounded-lg p-3">
-                  <span className="text-2xl">✉️</span>
-                </div>
-                <div className="ml-4">
-                  <div className="text-sm font-medium text-gray-900">Email Templates</div>
-                  <div className="text-xs text-gray-500">Edit notification emails</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
     </div>
   )
 }
