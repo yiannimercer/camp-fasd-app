@@ -6,13 +6,96 @@ import { useAuth } from '@/lib/contexts/AuthContext'
 import Link from 'next/link'
 import { Home, Users, UsersRound, FileEdit, Settings, Mail, ClipboardList, ClipboardCheck, LucideIcon } from 'lucide-react'
 
+// Navigation items defined outside component to prevent recreation
+const navigationItems: { name: string; href: string; icon: LucideIcon; section: string }[] = [
+  {
+    name: 'Overview',
+    href: '/super-admin',
+    icon: Home,
+    section: 'dashboard',
+  },
+  {
+    name: 'Review Applications',
+    href: '/admin/applications',
+    icon: ClipboardCheck,
+    section: 'review',
+  },
+  {
+    name: 'User Management',
+    href: '/super-admin/users',
+    icon: Users,
+    section: 'users',
+  },
+  {
+    name: 'Teams',
+    href: '/super-admin/teams',
+    icon: UsersRound,
+    section: 'teams',
+  },
+  {
+    name: 'Application Builder',
+    href: '/super-admin/application-builder',
+    icon: FileEdit,
+    section: 'builder',
+  },
+  {
+    name: 'System Configuration',
+    href: '/super-admin/settings',
+    icon: Settings,
+    section: 'settings',
+  },
+  {
+    name: 'Email Templates',
+    href: '/super-admin/email-templates',
+    icon: Mail,
+    section: 'email',
+  },
+  {
+    name: 'Audit Logs',
+    href: '/super-admin/audit-logs',
+    icon: ClipboardList,
+    section: 'audit',
+  },
+]
+
+// Separate component for sidebar navigation to ensure it re-renders on pathname changes
+function SidebarNav() {
+  const pathname = usePathname()
+
+  return (
+    <nav className="space-y-1">
+      {navigationItems.map((item) => {
+        // Check for exact match OR if we're on a subpage of this route
+        const isActive = pathname === item.href ||
+          (item.href !== '/super-admin' && pathname?.startsWith(item.href + '/'))
+        const IconComponent = item.icon
+        return (
+          <Link
+            key={item.name}
+            href={item.href}
+            className={`
+              flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors
+              ${isActive
+                ? 'bg-camp-green text-white'
+                : 'text-gray-700 hover:bg-gray-100'
+              }
+            `}
+          >
+            <IconComponent className="mr-3 h-5 w-5" />
+            {item.name}
+          </Link>
+        )
+      })}
+    </nav>
+  )
+}
+
 export default function SuperAdminLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   const router = useRouter()
-  const pathname = usePathname()
   const { user, loading, logout } = useAuth()
 
   const handleSignOut = async () => {
@@ -40,57 +123,6 @@ export default function SuperAdminLayout({
   if (!user || user.role !== 'super_admin') {
     return null
   }
-
-  const navigation: { name: string; href: string; icon: LucideIcon; section: string }[] = [
-    {
-      name: 'Overview',
-      href: '/super-admin',
-      icon: Home,
-      section: 'dashboard',
-    },
-    {
-      name: 'Review Applications',
-      href: '/admin/applications',
-      icon: ClipboardCheck,
-      section: 'review',
-    },
-    {
-      name: 'User Management',
-      href: '/super-admin/users',
-      icon: Users,
-      section: 'users',
-    },
-    {
-      name: 'Teams',
-      href: '/super-admin/teams',
-      icon: UsersRound,
-      section: 'teams',
-    },
-    {
-      name: 'Application Builder',
-      href: '/super-admin/application-builder',
-      icon: FileEdit,
-      section: 'builder',
-    },
-    {
-      name: 'System Configuration',
-      href: '/super-admin/settings',
-      icon: Settings,
-      section: 'settings',
-    },
-    {
-      name: 'Email Templates',
-      href: '/super-admin/email-templates',
-      icon: Mail,
-      section: 'email',
-    },
-    {
-      name: 'Audit Logs',
-      href: '/super-admin/audit-logs',
-      icon: ClipboardList,
-      section: 'audit',
-    },
-  ]
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -139,28 +171,7 @@ export default function SuperAdminLayout({
         <div className="flex gap-8">
           {/* Side Navigation */}
           <div className="w-64 flex-shrink-0">
-            <nav className="space-y-1">
-              {navigation.map((item) => {
-                const isActive = pathname === item.href
-                const IconComponent = item.icon
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    className={`
-                      flex items-center px-4 py-3 text-sm font-medium rounded-lg
-                      ${isActive
-                        ? 'bg-camp-green text-white'
-                        : 'text-gray-700 hover:bg-gray-100'
-                      }
-                    `}
-                  >
-                    <IconComponent className="mr-3 h-5 w-5" />
-                    {item.name}
-                  </Link>
-                )
-              })}
-            </nav>
+            <SidebarNav />
           </div>
 
           {/* Main Content */}
