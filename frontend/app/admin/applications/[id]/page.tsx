@@ -543,18 +543,20 @@ export default function AdminApplicationDetailPage() {
         }]
       })
 
-      // Update local state
-      if (application.responses) {
-        const updatedResponses = application.responses.map(r =>
-          r.question_id === questionId
-            ? { ...r, response_value: editValue }
-            : r
-        )
-        setApplication({ ...application, responses: updatedResponses })
-      }
+      // Reload fresh data from server to ensure UI matches backend
+      const [freshAppData, freshProgressData] = await Promise.all([
+        getApplicationAdmin(token, applicationId),
+        getApplicationProgressAdmin(token, applicationId)
+      ])
+
+      setApplication(freshAppData)
+      setProgress(freshProgressData)
 
       setEditingQuestion(null)
       setEditValue('')
+
+      // Show success feedback
+      alert('Changes saved successfully!')
     } catch (err) {
       console.error('Failed to save edit:', err)
       alert(err instanceof Error ? err.message : 'Failed to save changes')
@@ -576,23 +578,14 @@ export default function AdminApplicationDetailPage() {
       const fileInfo = await getFile(token, result.file_id)
       setFiles(prev => ({ ...prev, [questionId]: fileInfo }))
 
-      // Update the response to track the file_id
-      const updatedResponses = application.responses?.map(r =>
-        r.question_id === questionId
-          ? { ...r, file_id: result.file_id, response_value: undefined }
-          : r
-      ) || []
+      // Reload fresh data from server to ensure UI matches backend
+      const [freshAppData, freshProgressData] = await Promise.all([
+        getApplicationAdmin(token, applicationId),
+        getApplicationProgressAdmin(token, applicationId)
+      ])
 
-      // If no existing response, add a new one
-      if (!updatedResponses.find(r => r.question_id === questionId)) {
-        updatedResponses.push({
-          id: result.file_id,
-          question_id: questionId,
-          file_id: result.file_id
-        })
-      }
-
-      setApplication({ ...application, responses: updatedResponses })
+      setApplication(freshAppData)
+      setProgress(freshProgressData)
       setEditingFileQuestion(null)
 
       // Clear any previous errors for this question
@@ -601,6 +594,9 @@ export default function AdminApplicationDetailPage() {
         delete updated[questionId]
         return updated
       })
+
+      // Show success feedback
+      alert('File uploaded successfully!')
     } catch (err) {
       console.error('Failed to upload file:', err)
       alert(err instanceof Error ? err.message : 'Failed to upload file')
