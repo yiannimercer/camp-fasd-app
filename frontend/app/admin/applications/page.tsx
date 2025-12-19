@@ -5,7 +5,7 @@
 
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { Suspense, useEffect, useState, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import { useAuth } from '@/lib/contexts/AuthContext'
@@ -63,7 +63,7 @@ const STATUS_ORDER: Record<string, number> = {
 // LocalStorage key for sort preference
 const SORT_STORAGE_KEY = 'admin-applications-sort'
 
-export default function AdminApplicationsPage() {
+function AdminApplicationsContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { token, user, logout } = useAuth()
@@ -1245,5 +1245,22 @@ export default function AdminApplicationsPage() {
         />
       )}
     </div>
+  )
+}
+
+// Default export with Suspense boundary for useSearchParams
+// Required by Next.js 14+ for static generation / prerendering
+export default function AdminApplicationsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-camp-green mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading applications...</p>
+        </div>
+      </div>
+    }>
+      <AdminApplicationsContent />
+    </Suspense>
   )
 }
