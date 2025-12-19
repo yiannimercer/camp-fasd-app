@@ -551,6 +551,21 @@ export default function ApplicationWizardPage() {
     }
   }
 
+  // Format phone number as (XXX) XXX-XXXX
+  const formatPhoneNumber = (value: string): string => {
+    // Strip all non-numeric characters
+    const numbers = value.replace(/\D/g, '')
+
+    // Limit to 10 digits
+    const limited = numbers.slice(0, 10)
+
+    // Format based on length
+    if (limited.length === 0) return ''
+    if (limited.length <= 3) return `(${limited}`
+    if (limited.length <= 6) return `(${limited.slice(0, 3)}) ${limited.slice(3)}`
+    return `(${limited.slice(0, 3)}) ${limited.slice(3, 6)}-${limited.slice(6)}`
+  }
+
   const handleResponseChange = (questionId: string, value: string, isDetail: boolean = false) => {
     setResponses(prev => {
       // Create a new object to ensure React detects the change
@@ -1115,7 +1130,7 @@ export default function ApplicationWizardPage() {
                         type="tel"
                         placeholder={question.placeholder || '(555) 123-4567'}
                         value={responses[question.id] || ''}
-                        onChange={(e) => handleResponseChange(question.id, e.target.value)}
+                        onChange={(e) => handleResponseChange(question.id, formatPhoneNumber(e.target.value))}
                         className="w-full min-h-[48px] px-4 py-3 text-base border-2 border-gray-300 rounded-lg focus:border-camp-green focus:ring-2 focus:ring-camp-green/20 transition-colors"
                         required={question.is_required}
                       />

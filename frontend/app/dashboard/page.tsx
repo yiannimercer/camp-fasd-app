@@ -7,8 +7,8 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { useAuth } from '@/lib/contexts/AuthContext'
+import { AppHeader } from '@/components/shared/AppHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { createApplication, getMyApplications, Application } from '@/lib/api-applications'
@@ -27,9 +27,6 @@ import {
   Sun,
   Tent,
   User,
-  LogOut,
-  Settings,
-  Shield,
   X,
   Mail,
   ExternalLink,
@@ -123,7 +120,7 @@ function ContactSupportModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
         <div className="p-6">
           <div className="space-y-4">
             <a
-              href="mailto:support@fasdcamp.org"
+              href="mailto:admin@fasdcamp.org"
               className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group"
             >
               <div className="p-3 bg-camp-green/10 rounded-full text-camp-green group-hover:bg-camp-green group-hover:text-white transition-colors">
@@ -131,7 +128,7 @@ function ContactSupportModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
               </div>
               <div className="flex-1">
                 <p className="font-semibold text-camp-charcoal">Email Us</p>
-                <p className="text-sm text-gray-600">support@fasdcamp.org</p>
+                <p className="text-sm text-gray-600">admin@fasdcamp.org</p>
               </div>
               <ExternalLink className="h-5 w-5 text-gray-400 group-hover:text-camp-green" />
             </a>
@@ -313,7 +310,7 @@ function ApplicationCard({
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { user, token, logout, isAuthenticated, loading } = useAuth()
+  const { user, token, isAuthenticated, loading } = useAuth()
   const [applications, setApplications] = useState<Application[]>([])
   const [loadingApps, setLoadingApps] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -373,11 +370,6 @@ export default function DashboardPage() {
     router.push(`/dashboard/application/${applicationId}`)
   }
 
-  const handleLogout = async () => {
-    await logout()
-    router.push('/login')
-  }
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-white to-orange-50">
@@ -396,7 +388,7 @@ export default function DashboardPage() {
   const hasAcceptedApplication = applications.some(app => app.status === 'accepted')
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50/50 via-white to-orange-50/50">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-green-50/50 via-white to-orange-50/50">
       {/* Decorative Background Elements */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <TreePine className="absolute top-20 left-10 h-32 w-32 text-camp-green/5 rotate-12" />
@@ -405,75 +397,10 @@ export default function DashboardPage() {
       </div>
 
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-gray-200/50 shadow-sm sticky top-0 z-40">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <Link href="/" className="flex items-center space-x-3 group">
-            <div className="p-2 bg-camp-green rounded-lg group-hover:bg-camp-green/90 transition-colors">
-              <TreePine className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-camp-green group-hover:text-camp-green/80 transition-colors">
-                CAMP FASD
-              </h1>
-              <span className="text-xs text-gray-500">Application Portal</span>
-            </div>
-          </Link>
-
-          <div className="flex items-center space-x-4">
-            <div className="text-right hidden sm:block">
-              <p className="text-sm font-medium text-camp-charcoal">
-                {user.first_name || user.last_name
-                  ? `${user.first_name || ''} ${user.last_name || ''}`.trim()
-                  : user.email}
-              </p>
-              <p className="text-xs text-gray-500 capitalize">{user.role?.replace('_', ' ')}</p>
-            </div>
-
-            {user.role === 'super_admin' && (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => router.push('/super-admin')}
-                  className="text-xs gap-1"
-                >
-                  <Settings className="h-4 w-4" />
-                  <span className="hidden md:inline">Super Admin</span>
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => router.push('/admin/applications')}
-                  className="text-xs gap-1"
-                >
-                  <Shield className="h-4 w-4" />
-                  <span className="hidden md:inline">Admin Dashboard</span>
-                </Button>
-              </div>
-            )}
-
-            {user.role === 'admin' && (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => router.push('/admin/applications')}
-                className="gap-1"
-              >
-                <Shield className="h-4 w-4" />
-                <span className="hidden md:inline">Admin Dashboard</span>
-              </Button>
-            )}
-
-            <Button variant="outline" size="sm" onClick={handleLogout} className="gap-1">
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Sign Out</span>
-            </Button>
-          </div>
-        </div>
-      </header>
+      <AppHeader currentView="family" />
 
       {/* Main Content */}
-      <main className="relative container mx-auto px-4 py-8">
+      <main className="relative flex-1 container mx-auto px-4 py-8">
         {/* Welcome Section */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
@@ -668,7 +595,7 @@ export default function DashboardPage() {
       </main>
 
       {/* Footer */}
-      <footer className="relative bg-camp-charcoal text-white py-8 mt-16">
+      <footer className="relative bg-camp-charcoal text-white py-8 mt-auto">
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-3">

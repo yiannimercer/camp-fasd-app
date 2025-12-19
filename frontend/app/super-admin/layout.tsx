@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/contexts/AuthContext'
 import Link from 'next/link'
 import { Home, Users, UsersRound, FileEdit, Settings, Mail, ClipboardList, ClipboardCheck, LucideIcon } from 'lucide-react'
+import { AppHeader } from '@/components/shared/AppHeader'
 
 // Navigation items defined outside component to prevent recreation
 const navigationItems: { name: string; href: string; icon: LucideIcon; section: string }[] = [
@@ -96,12 +97,7 @@ export default function SuperAdminLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
-  const { user, loading, logout } = useAuth()
-
-  const handleSignOut = async () => {
-    await logout()
-    router.push('/login')
-  }
+  const { user, loading } = useAuth()
 
   useEffect(() => {
     if (!loading && (!user || user.role !== 'super_admin')) {
@@ -126,46 +122,7 @@ export default function SuperAdminLayout({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Top Bar */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <h1 className="text-2xl font-bold text-camp-green">CAMP FASD</h1>
-              </div>
-              <div className="ml-10">
-                <span className="px-3 py-1 bg-purple-100 text-purple-800 text-sm font-medium rounded-full">
-                  Super Admin
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <Link
-                href="/admin/applications"
-                className="text-sm text-gray-600 hover:text-camp-green"
-              >
-                Admin Dashboard
-              </Link>
-              <Link
-                href="/dashboard"
-                className="text-sm text-gray-600 hover:text-camp-green"
-              >
-                User Dashboard
-              </Link>
-              <div className="text-sm text-gray-700">
-                {user.first_name} {user.last_name}
-              </div>
-              <button
-                onClick={handleSignOut}
-                className="text-sm text-gray-600 hover:text-red-600 font-medium"
-              >
-                Sign Out
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <AppHeader currentView="super-admin" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex gap-8">

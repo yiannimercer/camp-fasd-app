@@ -71,7 +71,7 @@ import {
   HeaderCreate,
   HeaderUpdate,
 } from '@/lib/api-application-builder';
-import { uploadTemplateFile } from '@/lib/api-files';
+import { uploadTemplateFile, getTemplateFile } from '@/lib/api-files';
 
 const questionTypes = [
   { value: 'text', label: 'Short Text', description: 'Single line text input' },
@@ -96,10 +96,10 @@ const visibilityOptions = [
   { value: 'paid', label: 'After Payment', description: 'Show only after payment is complete' },
 ];
 
-const tierOptions = [
-  { value: 'all', label: 'All Tiers', description: 'Show for both Tier 1 and Tier 2' },
-  { value: '1', label: 'Tier 1 Only', description: 'Show only for applicants (before promotion)' },
-  { value: '2', label: 'Tier 2 Only', description: 'Show only for campers (after promotion)' },
+const statusOptions = [
+  { value: 'all', label: 'All Statuses', description: 'Show for both Applicants and Campers' },
+  { value: 'applicant', label: 'Applicants Only', description: 'Show only while filling out the initial application' },
+  { value: 'camper', label: 'Campers Only', description: 'Show only after being accepted as a camper' },
 ];
 
 // Default field configurations for medication and allergy lists
@@ -163,7 +163,7 @@ export default function ApplicationBuilderPage() {
     title: '',
     description: '',
     show_when_status: 'always' as 'always' | 'accepted' | 'paid',
-    tier: 'all' as 'all' | '1' | '2',
+    required_status: 'all' as 'all' | 'applicant' | 'camper',
     is_active: true,
   });
 
@@ -213,7 +213,7 @@ export default function ApplicationBuilderPage() {
       title: '',
       description: '',
       show_when_status: 'always',
-      tier: 'all',
+      required_status: 'all',
       is_active: true,
     });
     setEditingSectionId(null);
@@ -225,7 +225,7 @@ export default function ApplicationBuilderPage() {
       title: section.title,
       description: section.description || '',
       show_when_status: (section.show_when_status || 'always') as 'always' | 'accepted' | 'paid',
-      tier: section.tier ? String(section.tier) as '1' | '2' : 'all',
+      required_status: (section.required_status || 'all') as 'all' | 'applicant' | 'camper',
       is_active: section.is_active,
     });
     setEditingSectionId(section.id);
@@ -245,7 +245,7 @@ export default function ApplicationBuilderPage() {
           description: sectionForm.description,
           is_active: sectionForm.is_active,
           show_when_status: sectionForm.show_when_status === 'always' ? null : sectionForm.show_when_status,
-          tier: sectionForm.tier === 'all' ? null : parseInt(sectionForm.tier),
+          required_status: sectionForm.required_status === 'all' ? null : sectionForm.required_status,
         });
         setSections(prev => prev.map(s => s.id === editingSectionId ? updated : s));
       } else {
@@ -256,7 +256,7 @@ export default function ApplicationBuilderPage() {
           order_index: sections.length,
           is_active: sectionForm.is_active,
           show_when_status: sectionForm.show_when_status === 'always' ? null : sectionForm.show_when_status,
-          tier: sectionForm.tier === 'all' ? null : parseInt(sectionForm.tier),
+          required_status: sectionForm.required_status === 'all' ? null : sectionForm.required_status,
         });
         setSections(prev => [...prev, created]);
       }
@@ -321,6 +321,10 @@ export default function ApplicationBuilderPage() {
     try {
       setSaving(true);
 
+      // Question types that support options
+      const optionTypes = ['dropdown', 'multiple_choice', 'checkbox'];
+      const supportsOptions = optionTypes.includes(questionForm.question_type || '');
+
       if (editingQuestionId) {
         // Update existing question
         const updated = await updateQuestion(token, editingQuestionId, {
@@ -332,7 +336,7 @@ export default function ApplicationBuilderPage() {
           is_required: questionForm.is_required,
           is_active: questionForm.is_active,
           persist_annually: questionForm.persist_annually,
-          options: questionForm.options,
+          options: supportsOptions ? questionForm.options : [],
           validation_rules: questionForm.validation_rules,
           show_when_status: questionForm.show_when_status,
           template_file_id: questionForm.template_file_id,
@@ -369,7 +373,7 @@ export default function ApplicationBuilderPage() {
           is_active: questionForm.is_active!,
           persist_annually: questionForm.persist_annually,
           order_index: selectedSection.questions.length,
-          options: questionForm.options,
+          options: supportsOptions ? questionForm.options : [],
           validation_rules: questionForm.validation_rules,
           show_when_status: questionForm.show_when_status,
           template_file_id: questionForm.template_file_id,
@@ -944,9 +948,9 @@ export default function ApplicationBuilderPage() {
                           {visibilityOptions.find(v => v.value === section.show_when_status)?.label}
                         </Badge>
                       )}
-                      {section.tier && (
+                      {section.required_status && (
                         <Badge variant="outline" className="bg-purple-50 border-purple-300 text-purple-700">
-                          {section.tier === 1 ? 'Tier 1 Only' : 'Tier 2 Only'}
+                          {section.required_status === 'applicant' ? 'Applicants Only' : 'Campers Only'}
                         </Badge>
                       )}
                     </div>
@@ -1122,7 +1126,8 @@ export default function ApplicationBuilderPage() {
                                   {visibilityOptions.find(v => v.value === question.show_when_status)?.label}
                                 </Badge>
                               )}
-                              {question.options && question.options.length > 0 && (
+                              {question.options && question.options.length > 0 &&
+                               ['dropdown', 'multiple_choice', 'checkbox'].includes(question.question_type) && (
                                 <Badge variant="outline" className="text-xs">
                                   {question.options.length} options
                                 </Badge>
@@ -1329,18 +1334,18 @@ export default function ApplicationBuilderPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="section-tier">Application Tier</Label>
+              <Label htmlFor="section-status">Application Status</Label>
               <Select
-                value={sectionForm.tier}
+                value={sectionForm.required_status}
                 onValueChange={(value: any) =>
-                  setSectionForm(prev => ({ ...prev, tier: value }))
+                  setSectionForm(prev => ({ ...prev, required_status: value }))
                 }
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {tierOptions.map((option) => (
+                  {statusOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       <div>
                         <div className="font-medium">{option.label}</div>
@@ -1350,9 +1355,6 @@ export default function ApplicationBuilderPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                Tier 1 = Applicant (before promotion), Tier 2 = Camper (after promotion)
-              </p>
             </div>
 
             <div className="flex items-center justify-between">
@@ -1492,11 +1494,30 @@ export default function ApplicationBuilderPage() {
                 {questionForm.template_file_id ? (
                   <div className="flex items-center gap-2 p-3 bg-white rounded border border-green-300">
                     <FileText className="h-4 w-4 text-green-600" />
-                    <span className="text-sm flex-1">Template file attached</span>
+                    <span className="text-sm flex-1 truncate" title={questionForm.template_filename || 'Template file'}>
+                      {questionForm.template_filename || 'Template file attached'}
+                    </span>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => setQuestionForm(prev => ({ ...prev, template_file_id: null }))}
+                      onClick={async () => {
+                        if (!token || !questionForm.template_file_id) return
+                        try {
+                          const fileInfo = await getTemplateFile(token, questionForm.template_file_id)
+                          window.open(fileInfo.url, '_blank')
+                        } catch (error) {
+                          console.error('Failed to get template file:', error)
+                        }
+                      }}
+                      title="View/Download"
+                    >
+                      <Download className="h-4 w-4 text-blue-600" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setQuestionForm(prev => ({ ...prev, template_file_id: null, template_filename: null }))}
+                      title="Remove template"
                     >
                       <Trash2 className="h-4 w-4 text-red-600" />
                     </Button>
@@ -1513,7 +1534,11 @@ export default function ApplicationBuilderPage() {
                         try {
                           setSaving(true)
                           const result = await uploadTemplateFile(token, file)
-                          setQuestionForm(prev => ({ ...prev, template_file_id: result.file_id }))
+                          setQuestionForm(prev => ({
+                            ...prev,
+                            template_file_id: result.file_id,
+                            template_filename: result.filename
+                          }))
                           setSaveStatus('success')
                           setTimeout(() => setSaveStatus('idle'), 2000)
                         } catch (error) {

@@ -7,8 +7,8 @@
 
 import { Suspense, useEffect, useState, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Image from 'next/image'
 import { useAuth } from '@/lib/contexts/AuthContext'
+import { AppHeader } from '@/components/shared/AppHeader'
 import { getAllApplications, ApplicationWithUser } from '@/lib/api-admin'
 import {
   promoteToCamper,
@@ -66,7 +66,7 @@ const SORT_STORAGE_KEY = 'admin-applications-sort'
 function AdminApplicationsContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { token, user, logout } = useAuth()
+  const { token, user } = useAuth()
   const [applications, setApplications] = useState<ApplicationWithUser[]>([])
   const [allApplications, setAllApplications] = useState<ApplicationWithUser[]>([]) // For stats (unfiltered)
   const [loading, setLoading] = useState(true)
@@ -510,72 +510,9 @@ function AdminApplicationsContent() {
     )
   }
 
-  const handleLogout = async () => {
-    await logout()
-    router.push('/login')
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            {/* Left: Logo and Title */}
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center">
-                <Image
-                  src="/camp-logo.png"
-                  alt="CAMP - A FASD Community"
-                  width={45}
-                  height={50}
-                  className="object-contain"
-                />
-                <p className="ml-2 text-xs text-gray-500 font-medium">Admin Portal</p>
-              </div>
-            </div>
-
-            {/* Right: User Info and Logout */}
-            <div className="flex items-center space-x-4">
-              {/* Super Admin Dashboard Selector */}
-              {user?.role === 'super_admin' && (
-                <div className="flex items-center gap-2 mr-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => router.push('/super-admin')}
-                    className="text-xs"
-                  >
-                    Super Admin
-                  </Button>
-                  <span className="text-gray-300">|</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => router.push('/dashboard')}
-                    className="text-xs"
-                  >
-                    Family View
-                  </Button>
-                </div>
-              )}
-              <div className="text-right hidden sm:block">
-                <p className="text-sm font-medium text-camp-charcoal">
-                  {user?.first_name} {user?.last_name}
-                </p>
-                <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLogout}
-              >
-                Sign Out
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <AppHeader currentView="admin" />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

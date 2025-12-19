@@ -54,7 +54,7 @@ export interface Section {
   order_index: number;
   is_active: boolean;
   show_when_status?: string | null;
-  tier?: number | null;  // NULL=all tiers, 1=Tier 1 only, 2=Tier 2 only
+  required_status?: string | null;  // NULL=all, 'applicant'=applicants only, 'camper'=campers only
   created_at: string;
   updated_at: string;
   questions: Question[];
@@ -67,7 +67,7 @@ export interface SectionCreate {
   order_index: number;
   is_active?: boolean;
   show_when_status?: string | null;
-  tier?: number | null;
+  required_status?: string | null;  // NULL=all, 'applicant', 'camper'
 }
 
 export interface SectionUpdate {
@@ -76,7 +76,7 @@ export interface SectionUpdate {
   order_index?: number;
   is_active?: boolean;
   show_when_status?: string | null;
-  tier?: number | null;
+  required_status?: string | null;  // NULL=all, 'applicant', 'camper'
 }
 
 export interface QuestionCreate {
