@@ -81,8 +81,8 @@ export default function LandingPage() {
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-full shadow-sm border border-white/50 mb-8 animate-fade-in">
             <Tent className="w-4 h-4 text-camp-green" />
-            <span className="text-sm font-medium text-gray-700">Summer 2025 Applications Open</span>
-            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            <span className="text-sm font-medium text-gray-700">Summer 2025 Applications Opening Soon</span>
+            <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
           </div>
 
           {/* Main Headline */}
@@ -167,7 +167,7 @@ export default function LandingPage() {
               Ready to Join the Camp Family?
             </h3>
             <p className="text-lg text-gray-600 mb-8">
-              The application takes about 30 minutes. You can save your progress and return anytime.
+              The application takes a couple of hours to complete. You can save your progress and return anytime.
             </p>
             <Link
               href="/register"

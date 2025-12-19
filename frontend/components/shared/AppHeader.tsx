@@ -60,17 +60,15 @@ export function AppHeader({ currentView }: AppHeaderProps) {
         <div className="flex justify-between items-center h-16">
           {/* Left: Logo & Current View Indicator */}
           <div className="flex items-center gap-4">
-            <Link href="/" className="flex items-center gap-2 group">
+            <Link href="/" className="flex items-center group">
               <Image
-                src="/logos/CF_logo_tree.png"
-                alt="Camp FASD"
-                width={36}
-                height={40}
-                className="object-contain"
+                src="/2019-CAMP-Logo-Transparent.png"
+                alt="CAMP - A FASD Community"
+                width={140}
+                height={56}
+                className="object-contain h-12 w-auto"
+                priority
               />
-              <span className="text-xl font-bold text-camp-green group-hover:text-camp-green/80 transition-colors">
-                CAMP FASD
-              </span>
             </Link>
 
             {/* Current View Badge */}
