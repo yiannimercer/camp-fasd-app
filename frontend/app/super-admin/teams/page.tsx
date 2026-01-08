@@ -15,15 +15,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import {
   Plus,
   Edit,
@@ -33,7 +37,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Mail,
-  RefreshCw
+  RefreshCw,
+  Palette
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -47,24 +52,181 @@ import {
   UserWithDetails
 } from '@/lib/api-super-admin';
 
-// Available team colors (matching database hex values)
-const teamColors = [
-  { value: '#3B82F6', label: 'Blue', class: 'bg-blue-500' },
-  { value: '#10B981', label: 'Green', class: 'bg-emerald-500' },
-  { value: '#8B5CF6', label: 'Purple', class: 'bg-violet-500' },
-  { value: '#F59E0B', label: 'Orange', class: 'bg-amber-500' },
-  { value: '#EC4899', label: 'Pink', class: 'bg-pink-500' },
-  { value: '#EF4444', label: 'Red', class: 'bg-red-500' },
-  { value: '#06B6D4', label: 'Cyan', class: 'bg-cyan-500' },
-  { value: '#84CC16', label: 'Lime', class: 'bg-lime-500' },
+// Rich color palette for teams - more variety than status colors
+const TEAM_COLOR_PRESETS = [
+  // Blues
+  { hex: '#3B82F6', name: 'Blue' },
+  { hex: '#1D4ED8', name: 'Royal Blue' },
+  { hex: '#0EA5E9', name: 'Sky' },
+  { hex: '#06B6D4', name: 'Cyan' },
+  // Greens
+  { hex: '#10B981', name: 'Emerald' },
+  { hex: '#22C55E', name: 'Green' },
+  { hex: '#84CC16', name: 'Lime' },
+  { hex: '#14B8A6', name: 'Teal' },
+  // Purples & Pinks
+  { hex: '#8B5CF6', name: 'Violet' },
+  { hex: '#A855F7', name: 'Purple' },
+  { hex: '#EC4899', name: 'Pink' },
+  { hex: '#F472B6', name: 'Rose' },
+  // Warm colors
+  { hex: '#F59E0B', name: 'Amber' },
+  { hex: '#F97316', name: 'Orange' },
+  { hex: '#EF4444', name: 'Red' },
+  { hex: '#DC2626', name: 'Crimson' },
+  // Neutrals
+  { hex: '#64748B', name: 'Slate' },
+  { hex: '#78716C', name: 'Stone' },
+  { hex: '#6B7280', name: 'Gray' },
+  { hex: '#374151', name: 'Charcoal' },
 ];
+
+// Validate hex color format
+function isValidHex(color: string): boolean {
+  return /^#[0-9A-Fa-f]{6}$/.test(color);
+}
+
+// ============================================================================
+// TEAM COLOR PICKER COMPONENT
+// ============================================================================
+function TeamColorPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (color: string) => void;
+}) {
+  const [customColor, setCustomColor] = useState(value);
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    setCustomColor(value);
+  }, [value]);
+
+  const handlePresetClick = (color: string) => {
+    onChange(color);
+    setIsOpen(false);
+  };
+
+  const handleCustomChange = (input: string) => {
+    let formatted = input.startsWith('#') ? input : `#${input}`;
+    formatted = formatted.toUpperCase();
+    setCustomColor(formatted);
+    if (isValidHex(formatted)) {
+      onChange(formatted);
+    }
+  };
+
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className="group flex items-center gap-3 w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all duration-150"
+          type="button"
+        >
+          <div
+            className="w-6 h-6 rounded-lg ring-1 ring-black/10 shadow-inner flex-shrink-0"
+            style={{ backgroundColor: value }}
+          />
+          <span className="text-sm font-mono text-gray-600 group-hover:text-gray-900 transition-colors">
+            {value}
+          </span>
+          <Palette className="w-4 h-4 text-gray-400 ml-auto" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-4 shadow-xl border-gray-200" align="start">
+        <div className="space-y-4">
+          {/* Preset Colors Grid */}
+          <div>
+            <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3 block">
+              Preset Colors
+            </Label>
+            <div className="grid grid-cols-5 gap-2">
+              {TEAM_COLOR_PRESETS.map((preset) => (
+                <TooltipProvider key={preset.hex} delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className={`w-10 h-10 rounded-lg transition-all duration-150 ${
+                          value === preset.hex
+                            ? 'ring-2 ring-camp-green ring-offset-2 scale-110'
+                            : 'ring-1 ring-black/10 hover:ring-black/25 hover:scale-105'
+                        }`}
+                        style={{ backgroundColor: preset.hex }}
+                        onClick={() => handlePresetClick(preset.hex)}
+                      />
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                      <span className="font-medium">{preset.name}</span>
+                      <span className="text-gray-400 font-mono ml-1.5">{preset.hex}</span>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ))}
+            </div>
+          </div>
+
+          <Separator className="bg-gray-100" />
+
+          {/* Custom Hex Input */}
+          <div>
+            <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2.5 block">
+              Custom Color
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                value={customColor}
+                onChange={(e) => handleCustomChange(e.target.value)}
+                placeholder="#3B82F6"
+                className="font-mono text-sm h-10"
+                maxLength={7}
+              />
+              <div
+                className="w-10 h-10 rounded-lg ring-1 ring-black/10 flex-shrink-0 shadow-inner"
+                style={{
+                  backgroundColor: isValidHex(customColor) ? customColor : '#FFF',
+                }}
+              />
+            </div>
+            {!isValidHex(customColor) && customColor.length > 1 && (
+              <p className="text-xs text-red-500 mt-1.5">
+                Enter a valid hex code (e.g., #3B82F6)
+              </p>
+            )}
+          </div>
+
+          {/* Live Preview */}
+          <div>
+            <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2.5 block">
+              Preview
+            </Label>
+            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+              <div
+                className="w-4 h-4 rounded-full flex-shrink-0"
+                style={{ backgroundColor: isValidHex(customColor) ? customColor : value }}
+              />
+              <span className="text-sm font-medium text-gray-700">Team Name</span>
+              <Badge
+                className="ml-auto text-white text-xs"
+                style={{ backgroundColor: isValidHex(customColor) ? customColor : value }}
+              >
+                Example
+              </Badge>
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export default function TeamsPage() {
   const { token } = useAuth();
 
   // Data state
   const [teams, setTeams] = useState<Team[]>([]);
-  const [allAdmins, setAllAdmins] = useState<UserWithDetails[]>([]);
+  const [allStaffUsers, setAllStaffUsers] = useState<UserWithDetails[]>([]); // Admins + Super Admins
   const [teamMembers, setTeamMembers] = useState<Record<string, UserWithDetails[]>>({});
 
   // UI state
@@ -79,7 +241,7 @@ export default function TeamsPage() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [saveMessage, setSaveMessage] = useState('');
 
-  // Fetch teams and admins
+  // Fetch teams and staff users (admins + super admins)
   const fetchData = useCallback(async () => {
     if (!token) return;
 
@@ -87,19 +249,23 @@ export default function TeamsPage() {
       setLoading(true);
       setError(null);
 
-      // Fetch teams and all admin users in parallel
-      const [teamsData, adminsData] = await Promise.all([
+      // Fetch teams and all staff users (admins + super admins) in parallel
+      const [teamsData, adminsData, superAdminsData] = await Promise.all([
         getAllTeams(token),
-        getAllUsers(token, { role: 'admin' })
+        getAllUsers(token, { role: 'admin' }),
+        getAllUsers(token, { role: 'super_admin' })
       ]);
 
-      setTeams(teamsData);
-      setAllAdmins(adminsData);
+      // Combine admins and super admins
+      const allStaff = [...adminsData, ...superAdminsData];
 
-      // Group admins by their team
+      setTeams(teamsData);
+      setAllStaffUsers(allStaff);
+
+      // Group staff by their team
       const membersByTeam: Record<string, UserWithDetails[]> = {};
       teamsData.forEach(team => {
-        membersByTeam[team.key] = adminsData.filter(admin => admin.team === team.key);
+        membersByTeam[team.key] = allStaff.filter(user => user.team === team.key);
       });
       setTeamMembers(membersByTeam);
 
@@ -482,29 +648,12 @@ export default function TeamsPage() {
 
             <div className="space-y-2">
               <Label htmlFor="team-color">Team Color</Label>
-              <Select
+              <TeamColorPicker
                 value={editingTeam.color || '#3B82F6'}
-                onValueChange={(value) =>
-                  setEditingTeam(prev => ({ ...prev, color: value }))
+                onChange={(color) =>
+                  setEditingTeam(prev => ({ ...prev, color }))
                 }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {teamColors.map((color) => (
-                    <SelectItem key={color.value} value={color.value}>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-4 h-4 rounded-full"
-                          style={{ backgroundColor: color.value }}
-                        />
-                        {color.label}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
 
             {editingTeam.id && (
@@ -552,25 +701,25 @@ export default function TeamsPage() {
           <DialogHeader>
             <DialogTitle>Manage Team Members</DialogTitle>
             <DialogDescription>
-              Add or remove admin users from <strong>{selectedTeam?.name}</strong>
+              Add or remove staff members from <strong>{selectedTeam?.name}</strong>
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-2">
             <div className="text-sm text-muted-foreground mb-3">
-              Select the admin users who should be part of this team.
-              Only users with the Admin role are shown.
+              Select the staff members who should be part of this team.
+              Admin and Super Admin users are shown below.
             </div>
 
-            {allAdmins.length === 0 ? (
+            {allStaffUsers.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>No admin users found.</p>
-                <p className="text-sm">Promote users to Admin role first in User Management.</p>
+                <p>No staff users found.</p>
+                <p className="text-sm">Promote users to Admin or Super Admin role first in User Management.</p>
               </div>
             ) : (
               <div className="space-y-2 max-h-[400px] overflow-y-auto border rounded-md p-2">
-                {allAdmins.map((user) => {
+                {allStaffUsers.map((user) => {
                   const isSelected = selectedMemberIds.includes(user.id);
                   const isOnAnotherTeam = user.team && user.team !== selectedTeam?.key;
 
@@ -589,10 +738,22 @@ export default function TeamsPage() {
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <div className="font-medium">
+                          <div className="font-medium flex items-center gap-2">
                             {user.first_name} {user.last_name}
+                            {user.role === 'super_admin' && (
+                              <span
+                                className="text-[10px] px-1.5 py-0.5 font-semibold rounded tracking-wide uppercase border whitespace-nowrap"
+                                style={{
+                                  background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)',
+                                  color: '#92400E',
+                                  borderColor: '#F59E0B',
+                                }}
+                              >
+                                Super Admin
+                              </span>
+                            )}
                             {isOnAnotherTeam && (
-                              <Badge variant="outline" className="ml-2 text-xs">
+                              <Badge variant="outline" className="text-xs">
                                 Currently: {user.team}
                               </Badge>
                             )}
@@ -617,7 +778,7 @@ export default function TeamsPage() {
           </div>
 
           <div className="text-sm text-muted-foreground">
-            {selectedMemberIds.length} admin{selectedMemberIds.length !== 1 ? 's' : ''} selected
+            {selectedMemberIds.length} member{selectedMemberIds.length !== 1 ? 's' : ''} selected
           </div>
 
           <DialogFooter>

@@ -16,6 +16,7 @@ class ApplicationSectionBase(BaseModel):
     visible_before_acceptance: bool = True
     show_when_status: Optional[str] = None
     required_status: Optional[str] = None  # NULL=all, 'applicant'=applicant only, 'camper'=camper only
+    score_calculation_type: Optional[str] = None  # e.g., 'fasd_best' for FASD BeST score calculation
 
 
 class ApplicationSection(ApplicationSectionBase):
@@ -62,9 +63,25 @@ class ApplicationQuestion(ApplicationQuestionBase):
         from_attributes = True
 
 
+# Section Header Schema (for sub-section dividers within a section)
+class ApplicationHeader(BaseModel):
+    """Header for grouping questions within a section"""
+    id: UUID4
+    section_id: UUID4
+    header_text: str
+    order_index: int
+    is_active: bool = True
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class ApplicationSectionWithQuestions(ApplicationSection):
-    """Section with its questions included"""
+    """Section with its questions and headers included"""
     questions: List[ApplicationQuestion] = []
+    headers: List[ApplicationHeader] = []
 
     class Config:
         from_attributes = True
@@ -122,6 +139,8 @@ class Application(ApplicationBase):
     camper_age: Optional[int] = None
     camper_gender: Optional[str] = None
     tuition_status: Optional[str] = None
+    # FASD BeST Score - auto-calculated from FASD Screener responses
+    fasd_best_score: Optional[int] = None  # NULL if not all questions answered
     # Profile photo URL (pre-signed URL for displaying camper photo)
     profile_photo_url: Optional[str] = None
     created_at: datetime

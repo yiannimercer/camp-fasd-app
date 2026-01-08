@@ -1,9 +1,8 @@
 /**
  * Supabase Client Configuration
  *
- * Creates a Supabase client for direct database and storage access.
- * Note: This app uses custom FastAPI backend for auth, but Supabase
- * for database and storage.
+ * Creates a Supabase client for authentication, database, and storage access.
+ * Uses Supabase Auth for user authentication with session persistence.
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
@@ -32,7 +31,13 @@ function getSupabaseClient(): SupabaseClient {
 
   supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
-      persistSession: false, // We manage auth via FastAPI
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      // Storage key for the session
+      storageKey: 'camp-fasd-auth',
+      // Use localStorage for session persistence
+      storage: typeof window !== 'undefined' ? window.localStorage : undefined,
     },
   })
 

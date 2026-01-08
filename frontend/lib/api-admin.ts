@@ -31,6 +31,8 @@ export interface ApplicationWithUser {
   // Payment tracking
   paid_invoice?: boolean | null  // NULL=no invoice, false=unpaid, true=paid
   stripe_invoice_id?: string | null
+  // FASD BeST Score - auto-calculated from FASD Screener responses
+  fasd_best_score?: number | null  // NULL if not all questions answered
   // Timestamps
   created_at: string
   updated_at: string
@@ -44,6 +46,7 @@ export interface ApplicationWithUser {
   paid_at?: string  // When payment received
   // Admin info
   approval_count?: number
+  decline_count?: number
   approved_by_teams?: string[]
   note_count?: number
   responses?: Array<{

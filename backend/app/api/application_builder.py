@@ -141,6 +141,12 @@ class HeaderResponse(HeaderBase):
         from_attributes = True
 
 
+# Reorder item for unified ordering of questions and headers
+class ReorderItem(BaseModel):
+    id: UUID
+    order_index: int
+
+
 # Helper function to check super admin
 def require_super_admin(current_user: User = Depends(get_current_user)):
     if current_user.role != "super_admin":
@@ -547,17 +553,17 @@ async def reorder_sections(
 
 @router.post("/questions/reorder")
 async def reorder_questions(
-    question_ids: List[UUID],
+    items: List[ReorderItem],
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin)
 ):
-    """Reorder questions within a section by providing ordered list of question IDs"""
+    """Reorder questions by providing list of {id, order_index} pairs"""
 
-    # Update order_index for each question
-    for index, question_id in enumerate(question_ids):
+    # Update order_index for each question using the provided order_index
+    for item in items:
         db.query(ApplicationQuestion).filter(
-            ApplicationQuestion.id == question_id
-        ).update({"order_index": index})
+            ApplicationQuestion.id == item.id
+        ).update({"order_index": item.order_index})
 
     db.commit()
 
@@ -648,17 +654,17 @@ async def delete_header(
 
 @router.post("/headers/reorder")
 async def reorder_headers(
-    header_ids: List[UUID],
+    items: List[ReorderItem],
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin)
 ):
-    """Reorder headers within a section by providing ordered list of header IDs"""
+    """Reorder headers by providing list of {id, order_index} pairs"""
 
-    # Update order_index for each header
-    for index, header_id in enumerate(header_ids):
+    # Update order_index for each header using the provided order_index
+    for item in items:
         db.query(ApplicationHeader).filter(
-            ApplicationHeader.id == header_id
-        ).update({"order_index": index})
+            ApplicationHeader.id == item.id
+        ).update({"order_index": item.order_index})
 
     db.commit()
 

@@ -12,11 +12,11 @@ import { useAuth } from '@/lib/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { TreePine, Sun, Sparkles, Mountain } from 'lucide-react'
+import { TreePine, Sun, Sparkles, Mountain, Mail } from 'lucide-react'
 
 export default function RegisterPage() {
   const router = useRouter()
-  const { register, isAuthenticated } = useAuth()
+  const { register, loginWithGoogle, isAuthenticated } = useAuth()
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -27,6 +27,7 @@ export default function RegisterPage() {
   })
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [showConfirmationMessage, setShowConfirmationMessage] = useState(false)
 
   // Redirect if already authenticated
   if (isAuthenticated) {
@@ -57,14 +58,22 @@ export default function RegisterPage() {
     setIsLoading(true)
 
     try {
-      await register({
+      const result = await register({
         email: formData.email,
         password: formData.password,
         first_name: formData.first_name || undefined,
         last_name: formData.last_name || undefined,
         phone: formData.phone || undefined,
       })
-      router.push('/dashboard')
+
+      // Check if email confirmation is required (session will be null if so)
+      if (result?.session) {
+        // User is immediately logged in (email confirmation disabled)
+        router.push('/dashboard')
+      } else {
+        // Email confirmation required - show the message
+        setShowConfirmationMessage(true)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed')
     } finally {
@@ -126,14 +135,44 @@ export default function RegisterPage() {
 
         {/* Registration Card */}
         <Card className="backdrop-blur-sm bg-white/90 shadow-xl border-white/50 animate-fade-in-up">
-          <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-2xl font-bold text-camp-charcoal">Create Account</CardTitle>
-            <CardDescription className="text-gray-600">
-              Enter your information to get started with your application
-            </CardDescription>
-          </CardHeader>
+          {showConfirmationMessage ? (
+            // Email confirmation message
+            <CardContent className="pt-8 pb-8">
+              <div className="text-center space-y-6">
+                <div className="mx-auto w-16 h-16 bg-gradient-to-br from-camp-green to-emerald-600 rounded-full flex items-center justify-center shadow-lg">
+                  <Mail className="w-8 h-8 text-white" />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-bold text-camp-charcoal">Check Your Email</h2>
+                  <p className="text-gray-600 max-w-sm mx-auto">
+                    We've sent a confirmation link to <span className="font-semibold text-camp-charcoal">{formData.email}</span>.
+                    Please check your inbox and click the link to verify your account.
+                  </p>
+                </div>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+                  <p className="font-medium">Didn't receive the email?</p>
+                  <p className="mt-1">Check your spam folder or wait a few minutes. The email may take a moment to arrive.</p>
+                </div>
+                <div className="pt-4">
+                  <Link
+                    href="/login"
+                    className="text-camp-green hover:text-camp-orange font-semibold transition-colors"
+                  >
+                    Go to Sign In →
+                  </Link>
+                </div>
+              </div>
+            </CardContent>
+          ) : (
+            <>
+              <CardHeader className="space-y-1 pb-4">
+                <CardTitle className="text-2xl font-bold text-camp-charcoal">Create Account</CardTitle>
+                <CardDescription className="text-gray-600">
+                  Enter your information to get started with your application
+                </CardDescription>
+              </CardHeader>
 
-          <form onSubmit={handleSubmit}>
+              <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
               {error && (
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg animate-fade-in">
@@ -274,6 +313,7 @@ export default function RegisterPage() {
                 size="lg"
                 className="w-full border-2 border-gray-200 hover:border-camp-green/30 hover:bg-camp-green/5 transition-all group"
                 disabled={isLoading}
+                onClick={() => loginWithGoogle()}
               >
                 <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                   <path
@@ -308,7 +348,9 @@ export default function RegisterPage() {
                 </Link>
               </p>
             </CardFooter>
-          </form>
+              </form>
+            </>
+          )}
         </Card>
 
         {/* Footer */}

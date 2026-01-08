@@ -118,7 +118,7 @@ export default function MedicationList({
     // Initialize with converted 12-hour format times
     const convertedMeds = (value || []).map(med => ({
       ...med,
-      doses: med.doses.map(dose => {
+      doses: (med.doses || []).map(dose => {
         // If time_period is not set, try to convert from 24-hour format
         if (!dose.time_period && dose.time) {
           const { time12, period } = convert24To12Hour(dose.time);
@@ -146,7 +146,7 @@ export default function MedicationList({
 
     const convertedMeds = (value || []).map(med => ({
       ...med,
-      doses: med.doses.map(dose => {
+      doses: (med.doses || []).map(dose => {
         // If time_period is not set, try to convert from 24-hour format
         if (!dose.time_period && dose.time) {
           const { time12, period } = convert24To12Hour(dose.time);
@@ -476,8 +476,36 @@ export default function MedicationList({
 
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             {doseFields.map((field) => {
-                              // Special rendering for time field with AM/PM dropdown
+                              // Special rendering for time field - supports both dropdown and text+AM/PM modes
                               if (field.name === 'time') {
+                                // If time field is configured as dropdown with options, render as simple dropdown
+                                if (field.type === 'dropdown' && field.options && field.options.length > 0) {
+                                  return (
+                                    <div key={field.name}>
+                                      <label className="block text-xs font-medium text-blue-900 mb-1">
+                                        {field.label}
+                                        {field.required && <span className="text-red-500 ml-1">*</span>}
+                                      </label>
+                                      <select
+                                        value={dose.time || ''}
+                                        onChange={(e) => updateDose(medIndex, doseIndex, 'time', e.target.value)}
+                                        className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:border-camp-green focus:ring-2 focus:ring-camp-green/20 transition-colors"
+                                        disabled={dose.given_type === 'As needed'}
+                                        required={field.required}
+                                      >
+                                        <option value="">Select {field.label}</option>
+                                        {field.options.map((option, i) => (
+                                          <option key={i} value={option}>{option}</option>
+                                        ))}
+                                      </select>
+                                      {dose.given_type === 'As needed' && (
+                                        <p className="text-xs text-gray-500 mt-1">N/A for as-needed doses</p>
+                                      )}
+                                    </div>
+                                  );
+                                }
+
+                                // Default: render as text input with AM/PM dropdown (legacy behavior)
                                 return (
                                   <div key={field.name}>
                                     <label className="block text-xs font-medium text-blue-900 mb-1">

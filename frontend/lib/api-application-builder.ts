@@ -295,14 +295,14 @@ export async function duplicateQuestion(token: string, questionId: string): Prom
 }
 
 // Reorder questions
-export async function reorderQuestions(token: string, questionIds: string[]): Promise<void> {
+export async function reorderQuestions(token: string, items: { id: string; order_index: number }[]): Promise<void> {
   const response = await fetch(`${API_URL}/api/application-builder/questions/reorder`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify(questionIds),
+    body: JSON.stringify(items),
   });
 
   if (!response.ok) {
@@ -367,14 +367,14 @@ export async function deleteHeader(token: string, headerId: string): Promise<voi
 }
 
 // Reorder headers
-export async function reorderHeaders(token: string, headerIds: string[]): Promise<void> {
+export async function reorderHeaders(token: string, items: { id: string; order_index: number }[]): Promise<void> {
   const response = await fetch(`${API_URL}/api/application-builder/headers/reorder`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify(headerIds),
+    body: JSON.stringify(items),
   });
 
   if (!response.ok) {

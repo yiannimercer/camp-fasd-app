@@ -19,7 +19,9 @@ google-auth-oauthlib==1.2.0
 stripe==8.2.0
 
 # Email
-sendgrid==6.11.0
+resend==2.5.0
+markdown2==2.4.12
+html2text==2020.1.16
 
 # Validation
 pydantic==2.5.3

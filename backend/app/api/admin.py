@@ -3,17 +3,26 @@ Admin API routes for application management
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 from datetime import datetime, timezone
 
 from app.core.database import get_db
 from app.core.deps import get_current_admin_user
+from app.core.audit import (
+    log_application_event,
+    ACTION_TEAM_APPROVED, ACTION_TEAM_DECLINED,
+    ACTION_STATUS_PROMOTED, ACTION_STATUS_WAITLISTED,
+    ACTION_STATUS_DEFERRED, ACTION_STATUS_WITHDRAWN,
+    ACTION_STATUS_REJECTED, ACTION_NOTE_ADDED
+)
 from app.models.user import User
-from app.models.application import Application, AdminNote, ApplicationApproval, ApplicationResponse
+from app.models.application import Application, AdminNote, ApplicationApproval, ApplicationResponse, ApplicationQuestion
 from app.schemas.admin_note import AdminNote as AdminNoteSchema, AdminNoteCreate
 from app.schemas.application import ApplicationUpdate, Application as ApplicationSchema, ApplicationProgress
+from app.services import email_service
+from app.services.email_events import fire_email_event
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -256,6 +265,7 @@ async def get_approval_status(
 async def create_note(
     application_id: str,
     note_data: AdminNoteCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
@@ -279,13 +289,46 @@ async def create_note(
     )
     db.add(note)
 
-    # Auto-transition sub_status 'completed' → 'under_review' on first admin action (note)
-    if application.status == 'applicant' and application.sub_status == 'completed':
+    # Auto-transition sub_status 'complete' → 'under_review' on first admin action (note)
+    if application.status == 'applicant' and application.sub_status == 'complete':
         application.sub_status = 'under_review'
         application.under_review_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(note)
+
+    # Log audit event
+    log_application_event(
+        db=db,
+        action=ACTION_NOTE_ADDED,
+        application_id=application.id,
+        actor_id=current_user.id,
+        details={
+            "camper_name": f"{application.camper_first_name or ''} {application.camper_last_name or ''}".strip(),
+            "note_preview": note_data.note[:100] + "..." if len(note_data.note) > 100 else note_data.note
+        },
+        request=request
+    )
+
+    # Fire email events
+    try:
+        # Fire admin note added event
+        await fire_email_event(
+            db=db,
+            event='admin_note_added',
+            application_id=application.id,
+            user_id=application.user_id
+        )
+        # If transitioned to under_review, fire that event too
+        if application.sub_status == 'under_review':
+            await fire_email_event(
+                db=db,
+                event='applicant_under_review',
+                application_id=application.id,
+                user_id=application.user_id
+            )
+    except Exception as e:
+        print(f"Failed to fire email events: {e}")
 
     # Load admin info
     note = db.query(AdminNote).options(
@@ -326,7 +369,8 @@ async def get_notes(
 @router.post("/applications/{application_id}/approve")
 async def approve_application(
     application_id: str,
-    request: ApprovalRequest,
+    approval_request: ApprovalRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
@@ -338,7 +382,7 @@ async def approve_application(
     Admin-only endpoint
     """
     try:
-        if not request.note or not request.note.strip():
+        if not approval_request.note or not approval_request.note.strip():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="A note is required when approving an application"
@@ -360,7 +404,7 @@ async def approve_application(
         if existing:
             # Update existing record
             existing.approved = True
-            existing.note = request.note.strip()
+            existing.note = approval_request.note.strip()
             existing.created_at = datetime.now(timezone.utc)  # Update timestamp
         else:
             # Create new approval record
@@ -368,7 +412,7 @@ async def approve_application(
                 application_id=application_id,
                 admin_id=current_user.id,
                 approved=True,
-                note=request.note.strip()
+                note=approval_request.note.strip()
             )
             db.add(approval)
 
@@ -380,13 +424,56 @@ async def approve_application(
             ApplicationApproval.approved == True
         ).count()
 
-        # Auto-transition sub_status 'completed' → 'under_review' on first approval
-        if application.status == 'applicant' and application.sub_status == 'completed' and approval_count == 1:
+        # Auto-transition sub_status 'complete' → 'under_review' on first approval
+        if application.status == 'applicant' and application.sub_status == 'complete' and approval_count == 1:
             application.sub_status = 'under_review'
             application.under_review_at = datetime.now(timezone.utc)
 
         db.commit()
         db.refresh(application)
+
+        # Log audit event
+        log_application_event(
+            db=db,
+            action=ACTION_TEAM_APPROVED,
+            application_id=application.id,
+            actor_id=current_user.id,
+            details={
+                "camper_name": f"{application.camper_first_name or ''} {application.camper_last_name or ''}".strip(),
+                "team": current_user.team,
+                "approval_count": approval_count
+            },
+            request=request
+        )
+
+        # Fire email events
+        try:
+            # Fire team approval event
+            await fire_email_event(
+                db=db,
+                event='team_approval_added',
+                application_id=application.id,
+                user_id=application.user_id,
+                extra_context={'team': current_user.team, 'approval_count': approval_count}
+            )
+            # If transitioned to under_review, fire that event
+            if application.sub_status == 'under_review':
+                await fire_email_event(
+                    db=db,
+                    event='applicant_under_review',
+                    application_id=application.id,
+                    user_id=application.user_id
+                )
+            # If all 3 teams approved, fire that event
+            if approval_count >= 3:
+                await fire_email_event(
+                    db=db,
+                    event='all_teams_approved',
+                    application_id=application.id,
+                    user_id=application.user_id
+                )
+        except Exception as e:
+            print(f"Failed to fire email events: {e}")
 
         return {
             "message": "Application approved successfully",
@@ -411,7 +498,8 @@ async def approve_application(
 @router.post("/applications/{application_id}/decline")
 async def decline_application(
     application_id: str,
-    request: ApprovalRequest,
+    approval_request: ApprovalRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
@@ -423,7 +511,7 @@ async def decline_application(
     Admin-only endpoint
     """
     try:
-        if not request.note or not request.note.strip():
+        if not approval_request.note or not approval_request.note.strip():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="A note is required when declining an application"
@@ -445,7 +533,7 @@ async def decline_application(
         if existing:
             # Update existing record to declined
             existing.approved = False
-            existing.note = request.note.strip()
+            existing.note = approval_request.note.strip()
             existing.created_at = datetime.now(timezone.utc)
         else:
             # Create new decline record
@@ -453,12 +541,12 @@ async def decline_application(
                 application_id=application_id,
                 admin_id=current_user.id,
                 approved=False,
-                note=request.note.strip()
+                note=approval_request.note.strip()
             )
             db.add(decline)
 
-        # Auto-transition sub_status 'completed' → 'under_review' on first admin action (decline)
-        if application.status == 'applicant' and application.sub_status == 'completed':
+        # Auto-transition sub_status 'complete' → 'under_review' on first admin action (decline)
+        if application.status == 'applicant' and application.sub_status == 'complete':
             application.sub_status = 'under_review'
             application.under_review_at = datetime.now(timezone.utc)
 
@@ -474,6 +562,20 @@ async def decline_application(
             ApplicationApproval.application_id == application_id,
             ApplicationApproval.approved == False
         ).count()
+
+        # Log audit event
+        log_application_event(
+            db=db,
+            action=ACTION_TEAM_DECLINED,
+            application_id=application.id,
+            actor_id=current_user.id,
+            details={
+                "camper_name": f"{application.camper_first_name or ''} {application.camper_last_name or ''}".strip(),
+                "team": current_user.team,
+                "decline_count": decline_count
+            },
+            request=request
+        )
 
         return {
             "message": "Application declined",
@@ -497,6 +599,7 @@ async def decline_application(
 @router.post("/applications/{application_id}/accept")
 async def accept_application(
     application_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
@@ -504,12 +607,13 @@ async def accept_application(
     Legacy endpoint - redirects to promote-to-camper
     Kept for backwards compatibility
     """
-    return await promote_to_camper(application_id, db, current_user)
+    return await promote_to_camper(application_id, request, db, current_user)
 
 
 @router.post("/applications/{application_id}/promote-to-tier2")
 async def promote_to_tier2_legacy(
     application_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
@@ -517,12 +621,13 @@ async def promote_to_tier2_legacy(
     Legacy endpoint - redirects to promote-to-camper
     Kept for backwards compatibility
     """
-    return await promote_to_camper(application_id, db, current_user)
+    return await promote_to_camper(application_id, request, db, current_user)
 
 
 @router.post("/applications/{application_id}/promote-to-camper")
 async def promote_to_camper(
     application_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
@@ -600,8 +705,64 @@ async def promote_to_camper(
         application.completion_percentage = new_progress
         db.commit()
 
-        # TODO: Generate Stripe invoice here
-        # TODO: Send promotion/acceptance email to family
+        # Generate Stripe invoice automatically
+        invoice_result = None
+        try:
+            from app.services import stripe_service
+            user = db.query(User).filter(User.id == application.user_id).first()
+            if user:
+                invoice_result = stripe_service.create_invoice_for_application(
+                    db=db,
+                    application=application,
+                    user=user,
+                    created_by=current_user.id
+                )
+                if invoice_result['success']:
+                    print(f"Invoice created for application {application_id}: {invoice_result['stripe_invoice_id']}")
+                else:
+                    print(f"Invoice creation failed for application {application_id}: {invoice_result.get('error')}")
+        except Exception as e:
+            print(f"Failed to create invoice for application {application_id}: {e}")
+            invoice_result = {'success': False, 'error': str(e)}
+
+        # Fire email event for promotion to camper
+        try:
+            # Get the payment URL from invoice result, fallback to dashboard
+            payment_url = None
+            if invoice_result and invoice_result.get('success'):
+                payment_url = invoice_result.get('hosted_invoice_url')
+            if not payment_url:
+                from app.core.config import get_settings
+                payment_url = f"{get_settings().FRONTEND_URL}/dashboard"
+
+            await fire_email_event(
+                db=db,
+                event='promoted_to_camper',
+                application_id=application.id,
+                user_id=application.user_id,
+                extra_context={
+                    'approved_by_teams': list(teams),
+                    'super_admin_override': current_user.role == 'super_admin' and approval_count < 3,
+                    'paymentUrl': payment_url
+                }
+            )
+        except Exception as e:
+            print(f"Failed to fire promoted_to_camper event: {e}")
+
+        # Log audit event
+        log_application_event(
+            db=db,
+            action=ACTION_STATUS_PROMOTED,
+            application_id=application.id,
+            actor_id=current_user.id,
+            details={
+                "camper_name": f"{application.camper_first_name or ''} {application.camper_last_name or ''}".strip(),
+                "new_status": "camper",
+                "approved_by_teams": list(teams),
+                "super_admin_override": current_user.role == 'super_admin' and approval_count < 3
+            },
+            request=request
+        )
 
         return {
             "message": "Application promoted to Camper - new sections now available, invoice generated",
@@ -612,7 +773,8 @@ async def promote_to_camper(
             "promoted_at": application.promoted_to_camper_at.isoformat(),
             "approved_by_teams": list(teams),
             "new_completion_percentage": new_progress,
-            "super_admin_override": current_user.role == 'super_admin' and approval_count < 3
+            "super_admin_override": current_user.role == 'super_admin' and approval_count < 3,
+            "invoice": invoice_result if invoice_result else None
         }
     except HTTPException:
         raise
@@ -656,12 +818,26 @@ async def update_application_admin(
 
         # Save responses if provided
         if update_data.responses:
+            # OPTIMIZED: Pre-load all existing responses for this application in ONE query
+            # This eliminates N individual queries (1 per response being saved)
+            existing_responses_list = db.query(ApplicationResponse).filter(
+                ApplicationResponse.application_id == application_id
+            ).all()
+            existing_responses_map = {str(r.question_id): r for r in existing_responses_list}
+
+            # OPTIMIZED: Pre-load all questions being updated in ONE query
+            # This eliminates N individual queries for camper name sync
+            question_ids = [r.question_id for r in update_data.responses]
+            questions_list = db.query(ApplicationQuestion).filter(
+                ApplicationQuestion.id.in_(question_ids)
+            ).all()
+            questions_map = {str(q.id): q for q in questions_list}
+
             for response_data in update_data.responses:
-                # Check if response already exists
-                existing_response = db.query(ApplicationResponse).filter(
-                    ApplicationResponse.application_id == application_id,
-                    ApplicationResponse.question_id == response_data.question_id
-                ).first()
+                # Check if response already exists using pre-loaded map (O(1) lookup)
+                # Use str() to ensure consistent key format (handles both UUID and string types)
+                question_id_str = str(response_data.question_id)
+                existing_response = existing_responses_map.get(question_id_str)
 
                 if existing_response:
                     # Update existing response
@@ -676,6 +852,17 @@ async def update_application_admin(
                         file_id=response_data.file_id
                     )
                     db.add(new_response)
+
+                # Sync camper name fields to applications table when those questions are updated
+                # This keeps the denormalized columns in sync with the response values
+                # OPTIMIZED: Use pre-loaded questions map (O(1) lookup instead of query)
+                question = questions_map.get(question_id_str)
+                if question:
+                    question_text_lower = (question.question_text or '').lower().strip()
+                    if question_text_lower == 'camper first name':
+                        application.camper_first_name = response_data.response_value
+                    elif question_text_lower == 'camper last name':
+                        application.camper_last_name = response_data.response_value
 
         db.commit()
         db.refresh(application)
@@ -700,6 +887,7 @@ async def update_application_admin(
 @router.post("/applications/{application_id}/waitlist")
 async def add_to_waitlist(
     application_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
@@ -717,17 +905,47 @@ async def add_to_waitlist(
                 detail="Application not found"
             )
 
-        if application.status != 'applicant' or application.sub_status != 'under_review':
+        valid_sub_statuses = ['complete', 'under_review']
+        if application.status != 'applicant' or application.sub_status not in valid_sub_statuses:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Application must be 'applicant/under_review' to add to waitlist. Current: {application.status}/{application.sub_status}"
+                detail=f"Application must be 'applicant' with sub_status 'complete' or 'under_review' to add to waitlist. Current: {application.status}/{application.sub_status}"
             )
+
+        # Store the original sub_status so we can restore it when returning from waitlist
+        pre_waitlist_sub_status = application.sub_status
+        app_data = dict(application.application_data) if application.application_data else {}
+        app_data['pre_waitlist_sub_status'] = pre_waitlist_sub_status
+        application.application_data = app_data
 
         application.sub_status = 'waitlist'
         application.waitlisted_at = datetime.now(timezone.utc)
 
         db.commit()
         db.refresh(application)
+
+        # Log audit event
+        log_application_event(
+            db=db,
+            action=ACTION_STATUS_WAITLISTED,
+            application_id=application.id,
+            actor_id=current_user.id,
+            details={
+                "camper_name": f"{application.camper_first_name or ''} {application.camper_last_name or ''}".strip(),
+            },
+            request=request
+        )
+
+        # Fire email event for waitlisting
+        try:
+            await fire_email_event(
+                db=db,
+                event='applicant_waitlisted',
+                application_id=application.id,
+                user_id=application.user_id
+            )
+        except Exception as e:
+            print(f"Failed to fire applicant_waitlisted event: {e}")
 
         return {
             "message": "Application added to waitlist",
@@ -752,6 +970,7 @@ async def add_to_waitlist(
 async def remove_from_waitlist(
     application_id: str,
     action: str,  # 'promote' or 'return_review'
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
@@ -777,17 +996,25 @@ async def remove_from_waitlist(
 
         if action == 'promote':
             # Promote directly to Camper (uses existing promote logic)
-            return await promote_to_camper(application_id, db, current_user)
+            return await promote_to_camper(application_id, request, db, current_user)
 
         elif action == 'return_review':
-            application.sub_status = 'under_review'
+            # Restore the original sub_status from before waitlisting
+            app_data = application.application_data or {}
+            original_sub_status = app_data.get('pre_waitlist_sub_status', 'complete')
+            application.sub_status = original_sub_status
             application.waitlisted_at = None  # Clear waitlist timestamp
+
+            # Clean up the stored pre_waitlist_sub_status
+            if 'pre_waitlist_sub_status' in app_data:
+                del app_data['pre_waitlist_sub_status']
+                application.application_data = app_data
 
             db.commit()
             db.refresh(application)
 
             return {
-                "message": "Application returned to review",
+                "message": f"Application returned to {original_sub_status.replace('_', ' ')}",
                 "application_id": str(application.id),
                 "status": application.status,
                 "sub_status": application.sub_status
@@ -812,6 +1039,7 @@ async def remove_from_waitlist(
 @router.post("/applications/{application_id}/defer")
 async def defer_application(
     application_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
@@ -841,12 +1069,38 @@ async def defer_application(
                 detail="Cannot defer a camper who has already paid"
             )
 
+        old_status = application.status
         application.status = 'inactive'
         application.sub_status = 'deferred'
         application.deferred_at = datetime.now(timezone.utc)
 
         db.commit()
         db.refresh(application)
+
+        # Log audit event
+        log_application_event(
+            db=db,
+            action=ACTION_STATUS_DEFERRED,
+            application_id=application.id,
+            actor_id=current_user.id,
+            details={
+                "camper_name": f"{application.camper_first_name or ''} {application.camper_last_name or ''}".strip(),
+                "previous_status": old_status
+            },
+            request=request
+        )
+
+        # Fire email event for deactivation
+        try:
+            await fire_email_event(
+                db=db,
+                event='application_deactivated',
+                application_id=application.id,
+                user_id=application.user_id,
+                extra_context={'reason': 'deferred', 'previous_status': old_status}
+            )
+        except Exception as e:
+            print(f"Failed to fire application_deactivated event: {e}")
 
         return {
             "message": "Application deferred to next year",
@@ -870,6 +1124,7 @@ async def defer_application(
 @router.post("/applications/{application_id}/withdraw")
 async def withdraw_application(
     application_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
@@ -899,12 +1154,38 @@ async def withdraw_application(
                 detail="Cannot withdraw a camper who has already paid"
             )
 
+        old_status = application.status
         application.status = 'inactive'
         application.sub_status = 'withdrawn'
         application.withdrawn_at = datetime.now(timezone.utc)
 
         db.commit()
         db.refresh(application)
+
+        # Log audit event
+        log_application_event(
+            db=db,
+            action=ACTION_STATUS_WITHDRAWN,
+            application_id=application.id,
+            actor_id=current_user.id,
+            details={
+                "camper_name": f"{application.camper_first_name or ''} {application.camper_last_name or ''}".strip(),
+                "previous_status": old_status
+            },
+            request=request
+        )
+
+        # Fire email event for deactivation
+        try:
+            await fire_email_event(
+                db=db,
+                event='application_deactivated',
+                application_id=application.id,
+                user_id=application.user_id,
+                extra_context={'reason': 'withdrawn', 'previous_status': old_status}
+            )
+        except Exception as e:
+            print(f"Failed to fire application_deactivated event: {e}")
 
         return {
             "message": "Application withdrawn",
@@ -928,6 +1209,7 @@ async def withdraw_application(
 @router.post("/applications/{application_id}/reject")
 async def reject_application(
     application_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
@@ -967,7 +1249,29 @@ async def reject_application(
         db.commit()
         db.refresh(application)
 
-        # TODO: Send rejection email to family
+        # Log audit event
+        log_application_event(
+            db=db,
+            action=ACTION_STATUS_REJECTED,
+            application_id=application.id,
+            actor_id=current_user.id,
+            details={
+                "camper_name": f"{application.camper_first_name or ''} {application.camper_last_name or ''}".strip(),
+            },
+            request=request
+        )
+
+        # Fire email event for deactivation/rejection
+        try:
+            await fire_email_event(
+                db=db,
+                event='application_deactivated',
+                application_id=application.id,
+                user_id=application.user_id,
+                extra_context={'reason': 'rejected'}
+            )
+        except Exception as e:
+            print(f"Failed to fire application_deactivated event: {e}")
 
         return {
             "message": "Application rejected",
@@ -985,4 +1289,76 @@ async def reject_application(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error rejecting application: {str(e)}"
+        )
+
+
+@router.post("/applications/{application_id}/deactivate")
+async def deactivate_application(
+    application_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """
+    Deactivate an application
+    - Sets status='inactive' and sub_status='inactive'
+    - Generic action for withdrawing, deferring, or closing an application
+    - Hidden from default views, doesn't count in statistics
+    Admin-only endpoint
+    """
+    try:
+        application = db.query(Application).filter(Application.id == application_id).first()
+        if not application:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Application not found"
+            )
+
+        # Can't deactivate if already inactive or camper who has paid
+        if application.status == 'inactive':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Application is already deactivated"
+            )
+        if application.status == 'camper' and application.paid_invoice == True:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot deactivate a camper who has already paid"
+            )
+
+        old_status = application.status
+        application.status = 'inactive'
+        application.sub_status = 'inactive'
+        application.deactivated_at = datetime.now(timezone.utc)
+
+        db.commit()
+        db.refresh(application)
+
+        # Fire email event for deactivation
+        try:
+            await fire_email_event(
+                db=db,
+                event='application_deactivated',
+                application_id=application.id,
+                user_id=application.user_id,
+                extra_context={'reason': 'deactivated', 'previous_status': old_status}
+            )
+        except Exception as e:
+            print(f"Failed to fire application_deactivated event: {e}")
+
+        return {
+            "message": "Application deactivated",
+            "application_id": str(application.id),
+            "status": application.status,
+            "sub_status": application.sub_status,
+            "deactivated_at": application.deactivated_at.isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deactivating application: {str(e)}"
         )

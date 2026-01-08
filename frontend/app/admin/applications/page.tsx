@@ -8,29 +8,27 @@
 import { Suspense, useEffect, useState, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/contexts/AuthContext'
-import { AppHeader } from '@/components/shared/AppHeader'
+import { useStatusColors } from '@/lib/contexts/StatusColorsContext'
+import { useTeamColors } from '@/lib/contexts/TeamColorsContext'
+import { useToast } from '@/components/shared/ToastNotification'
 import { getAllApplications, ApplicationWithUser } from '@/lib/api-admin'
 import {
   promoteToCamper,
   addToWaitlist,
   removeFromWaitlist,
-  deferApplication,
-  withdrawApplication,
-  rejectApplication,
-  approveApplication
+  deactivateApplication,
+  approveApplication,
+  deferApplication
 } from '@/lib/api-admin-actions'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { formatDateOnlyCST } from '@/lib/date-utils'
-import { Hand, ArrowUp, ArrowDown, ArrowUpDown, MoreHorizontal, Clock, ArrowRightCircle, XCircle, CalendarX, MessageSquare } from 'lucide-react'
+import { ArrowUp, ArrowDown, ArrowUpDown, Mail, Send, Loader2 } from 'lucide-react'
 import { NotesModal } from '@/components/admin/NotesModal'
+import { ApplicationActionStrip } from '@/components/admin/ApplicationActionStrip'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { sendAdHocEmail } from '@/lib/api-emails'
+import { ConfirmationModal } from '@/components/shared/ConfirmationModal'
 
 // Sortable column keys
 type SortColumn = 'applicant' | 'camper' | 'status' | 'progress' | 'approvals' | 'created' | null
@@ -42,15 +40,12 @@ const SUB_STATUS_ORDER: Record<string, number> = {
   // Applicant sub-statuses
   'not_started': 1,
   'incomplete': 2,
-  'completed': 3,
+  'complete': 3,
   'under_review': 4,
   'waitlist': 5,
-  // Camper sub-statuses
-  'complete': 6,  // Note: Camper 'complete' vs Applicant 'completed'
-  // Inactive sub-statuses
-  'deferred': 7,
-  'withdrawn': 8,
-  'rejected': 9,
+  // Camper sub-statuses (same 'complete' value)
+  // Inactive sub-status
+  'inactive': 6,
 }
 
 // Status order (main lifecycle phase)
@@ -67,10 +62,12 @@ function AdminApplicationsContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { token, user } = useAuth()
+  const { getStatusStyle, getStatusColor, getCategoryStyle, getCategoryColor } = useStatusColors()
+  const { getTeamColor, getTeamStyle } = useTeamColors()
+  const toast = useToast()
   const [applications, setApplications] = useState<ApplicationWithUser[]>([])
-  const [allApplications, setAllApplications] = useState<ApplicationWithUser[]>([]) // For stats (unfiltered)
   const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState<string>('')
+  const [statusFilter, setStatusFilter] = useState<string>('open')
   const [searchTerm, setSearchTerm] = useState<string>('')
   const [error, setError] = useState<string>('')
 
@@ -89,6 +86,21 @@ function AdminApplicationsContent() {
   // Notes modal state
   const [notesModalOpen, setNotesModalOpen] = useState(false)
   const [selectedAppForNotes, setSelectedAppForNotes] = useState<{ id: string; camperName: string } | null>(null)
+
+  // Email modal state
+  const [emailModalOpen, setEmailModalOpen] = useState(false)
+  const [selectedAppForEmail, setSelectedAppForEmail] = useState<ApplicationWithUser | null>(null)
+  const [emailSubject, setEmailSubject] = useState('')
+  const [emailMessage, setEmailMessage] = useState('')
+  const [emailSending, setEmailSending] = useState(false)
+
+  // Confirmation modal states
+  const [confirmModal, setConfirmModal] = useState<{
+    type: 'promote' | 'waitlist' | 'removeWaitlist' | 'deactivate' | 'defer' | null
+    app: ApplicationWithUser | null
+    action?: 'promote' | 'return_review'
+  }>({ type: null, app: null })
+  const [confirmLoading, setConfirmLoading] = useState(false)
 
   // Load sort preference from localStorage on mount
   useEffect(() => {
@@ -117,30 +129,6 @@ function AdminApplicationsContent() {
     }
   }, [sortColumn, sortDirection])
 
-  // Check if user is admin
-  useEffect(() => {
-    if (!user) return
-    if (user.role !== 'admin' && user.role !== 'super_admin') {
-      router.push('/dashboard')
-    }
-  }, [user, router])
-
-  // Load ALL applications once (for stats cards)
-  useEffect(() => {
-    if (!token) return
-
-    const loadAllApplications = async () => {
-      try {
-        const data = await getAllApplications(token)
-        setAllApplications(data)
-      } catch (err) {
-        console.error('Failed to load all applications for stats:', err)
-      }
-    }
-
-    loadAllApplications()
-  }, [token])
-
   // Load filtered applications (for table)
   useEffect(() => {
     if (!token) return
@@ -162,101 +150,10 @@ function AdminApplicationsContent() {
     loadApplications()
   }, [token, statusFilter, searchTerm])
 
-  // Get badge color based on status and sub_status
-  const getStatusBadgeColor = (status: string, subStatus: string, paidInvoice?: boolean | null) => {
-    // Handle status-specific styling
-    switch (status) {
-      case 'applicant':
-        switch (subStatus) {
-          case 'not_started':
-            return 'bg-gray-100 text-gray-800'
-          case 'incomplete':
-            return 'bg-blue-100 text-blue-800'
-          case 'completed':
-            return 'bg-indigo-100 text-indigo-800'
-          case 'under_review':
-            return 'bg-yellow-100 text-yellow-800'
-          case 'waitlist':
-            return 'bg-orange-100 text-orange-800'
-          default:
-            return 'bg-gray-100 text-gray-800'
-        }
-      case 'camper':
-        // For campers, check payment status
-        if (paidInvoice === true) {
-          return 'bg-green-100 text-green-800'  // Paid
-        } else if (subStatus === 'complete') {
-          return 'bg-rose-100 text-rose-800'  // Complete but unpaid
-        } else {
-          return 'bg-cyan-100 text-cyan-800'  // Incomplete
-        }
-      case 'inactive':
-        switch (subStatus) {
-          case 'deferred':
-            return 'bg-slate-100 text-slate-600'
-          case 'withdrawn':
-            return 'bg-gray-100 text-gray-500'
-          case 'rejected':
-            return 'bg-red-100 text-red-800'
-          default:
-            return 'bg-gray-100 text-gray-800'
-        }
-      default:
-        return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  // Format stage display (sub-status) based on status + sub_status + paid_invoice
-  const formatStatusDisplay = (status: string, subStatus: string, paidInvoice?: boolean | null) => {
-    switch (status) {
-      case 'applicant':
-        const applicantSubStatusNames: Record<string, string> = {
-          'not_started': 'Not Started',
-          'incomplete': 'In Progress',
-          'completed': 'Complete',
-          'under_review': 'Under Review',
-          'waitlist': 'Waitlist',
-        }
-        return applicantSubStatusNames[subStatus] || subStatus
-      case 'camper':
-        // For campers: Incomplete → Complete → Paid
-        if (paidInvoice === true) {
-          return 'Paid'
-        } else if (subStatus === 'complete') {
-          return 'Awaiting Payment'
-        } else {
-          return 'Incomplete'
-        }
-      case 'inactive':
-        const inactiveSubStatusNames: Record<string, string> = {
-          'deferred': 'Deferred',
-          'withdrawn': 'Withdrawn',
-          'rejected': 'Rejected',
-        }
-        return inactiveSubStatusNames[subStatus] || subStatus
-      default:
-        return subStatus
-    }
-  }
-
-  // Get status category badge (Applicant, Camper, Inactive)
-  const getStatusCategoryBadge = (status: string) => {
-    switch (status) {
-      case 'applicant':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 mr-2">Applicant</span>
-      case 'camper':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 mr-2">Camper</span>
-      case 'inactive':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 mr-2">Inactive</span>
-      default:
-        return null
-    }
-  }
-
   // Approve application handler - now requires note, so redirect to detail page
   const handleApprove = async (applicationId: string) => {
     // Approving now requires a note - direct users to the detail page
-    alert('Approving or declining an application now requires adding a note. Please open the application detail page to approve using the Admin Panel.')
+    toast.info('Approving or declining an application now requires adding a note. Please open the application detail page to approve using the Admin Panel.')
     router.push(`/admin/applications/${applicationId}`)
   }
 
@@ -272,152 +169,162 @@ function AdminApplicationsContent() {
   // Refresh applications after note is added
   const handleNoteAdded = async () => {
     if (!token) return
-    const [allData, filteredData] = await Promise.all([
-      getAllApplications(token),
-      getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
-    ])
-    setAllApplications(allData)
-    setApplications(filteredData)
+    const data = await getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
+    setApplications(data)
   }
 
-  const handlePromoteToCamper = async (applicationId: string) => {
-    if (!token) return
+  // Open email modal for an application
+  const openEmailModal = (app: ApplicationWithUser) => {
+    const camperName = app.camper_first_name && app.camper_last_name
+      ? `${app.camper_first_name} ${app.camper_last_name}`
+      : 'Your Camper'
+    setSelectedAppForEmail(app)
+    setEmailSubject(`CAMP FASD - Regarding ${camperName}'s Application`)
+    setEmailMessage('')
+    setEmailModalOpen(true)
+  }
 
-    if (!confirm('Are you sure you want to promote this application to Camper status? This will generate an invoice and enable additional post-acceptance sections.')) {
-      return
-    }
+  // Send ad-hoc email
+  const handleSendEmail = async () => {
+    if (!token || !selectedAppForEmail || !emailSubject.trim() || !emailMessage.trim()) return
 
+    setEmailSending(true)
     try {
-      await promoteToCamper(token, applicationId)
+      await sendAdHocEmail(token, selectedAppForEmail.id, emailSubject, emailMessage)
+      toast.success('Email sent successfully!')
+      setEmailModalOpen(false)
+      setSelectedAppForEmail(null)
+      setEmailSubject('')
+      setEmailMessage('')
+    } catch (err) {
+      console.error('Failed to send email:', err)
+      toast.error(err instanceof Error ? err.message : 'Failed to send email')
+    } finally {
+      setEmailSending(false)
+    }
+  }
 
-      // Refresh both lists
-      const [allData, filteredData] = await Promise.all([
-        getAllApplications(token),
-        getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
-      ])
-      setAllApplications(allData)
-      setApplications(filteredData)
+  // Show promote confirmation modal
+  const showPromoteConfirm = (app: ApplicationWithUser) => {
+    setConfirmModal({ type: 'promote', app })
+  }
 
-      alert('Application promoted to Camper successfully!')
+  // Execute promote to camper after confirmation
+  const executePromoteToCamper = async () => {
+    if (!token || !confirmModal.app) return
+
+    setConfirmLoading(true)
+    try {
+      await promoteToCamper(token, confirmModal.app.id)
+
+      // Refresh list
+      const data = await getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
+      setApplications(data)
+
+      setConfirmModal({ type: null, app: null })
+      toast.success('Application promoted to Camper successfully!')
     } catch (err) {
       console.error('Failed to promote application:', err)
-      alert(err instanceof Error ? err.message : 'Failed to promote application')
+      toast.error(err instanceof Error ? err.message : 'Failed to promote application')
+    } finally {
+      setConfirmLoading(false)
     }
   }
 
-  // Add to waitlist handler
-  const handleAddToWaitlist = async (applicationId: string) => {
-    if (!token) return
+  // Show add to waitlist confirmation modal
+  const showWaitlistConfirm = (app: ApplicationWithUser) => {
+    setConfirmModal({ type: 'waitlist', app })
+  }
 
-    if (!confirm('Are you sure you want to add this application to the waitlist?')) {
-      return
-    }
+  // Execute add to waitlist after confirmation
+  const executeAddToWaitlist = async () => {
+    if (!token || !confirmModal.app) return
 
+    setConfirmLoading(true)
     try {
-      await addToWaitlist(token, applicationId)
-      const [allData, filteredData] = await Promise.all([
-        getAllApplications(token),
-        getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
-      ])
-      setAllApplications(allData)
-      setApplications(filteredData)
-      alert('Application added to waitlist')
+      await addToWaitlist(token, confirmModal.app.id)
+      const data = await getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
+      setApplications(data)
+      setConfirmModal({ type: null, app: null })
+      toast.success('Application added to waitlist')
     } catch (err) {
       console.error('Failed to add to waitlist:', err)
-      alert(err instanceof Error ? err.message : 'Failed to add to waitlist')
+      toast.error(err instanceof Error ? err.message : 'Failed to add to waitlist')
+    } finally {
+      setConfirmLoading(false)
     }
   }
 
-  // Remove from waitlist handler
-  const handleRemoveFromWaitlist = async (applicationId: string, action: 'promote' | 'return_review') => {
-    if (!token) return
+  // Show remove from waitlist confirmation modal
+  const showRemoveWaitlistConfirm = (app: ApplicationWithUser, action: 'promote' | 'return_review') => {
+    setConfirmModal({ type: 'removeWaitlist', app, action })
+  }
 
-    const actionText = action === 'promote' ? 'promote to Camper' : 'return to review'
-    if (!confirm(`Are you sure you want to ${actionText} this application?`)) {
-      return
-    }
+  // Execute remove from waitlist after confirmation
+  const executeRemoveFromWaitlist = async () => {
+    if (!token || !confirmModal.app || !confirmModal.action) return
 
+    setConfirmLoading(true)
     try {
-      await removeFromWaitlist(token, applicationId, action)
-      const [allData, filteredData] = await Promise.all([
-        getAllApplications(token),
-        getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
-      ])
-      setAllApplications(allData)
-      setApplications(filteredData)
-      alert(action === 'promote' ? 'Application promoted to Camper' : 'Application returned to review')
+      await removeFromWaitlist(token, confirmModal.app.id, confirmModal.action)
+      const data = await getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
+      setApplications(data)
+      const successMsg = confirmModal.action === 'promote' ? 'Application promoted to Camper' : 'Application returned to review'
+      setConfirmModal({ type: null, app: null })
+      toast.success(successMsg)
     } catch (err) {
       console.error('Failed to remove from waitlist:', err)
-      alert(err instanceof Error ? err.message : 'Failed to remove from waitlist')
+      toast.error(err instanceof Error ? err.message : 'Failed to remove from waitlist')
+    } finally {
+      setConfirmLoading(false)
     }
   }
 
-  // Defer handler
-  const handleDeferApplication = async (applicationId: string) => {
-    if (!token) return
+  // Show deactivate confirmation modal
+  const showDeactivateConfirm = (app: ApplicationWithUser) => {
+    setConfirmModal({ type: 'deactivate', app })
+  }
 
-    if (!confirm('Are you sure you want to defer this application to next year?')) {
-      return
-    }
+  // Execute deactivate after confirmation
+  const executeDeactivate = async () => {
+    if (!token || !confirmModal.app) return
 
+    setConfirmLoading(true)
     try {
-      await deferApplication(token, applicationId)
-      const [allData, filteredData] = await Promise.all([
-        getAllApplications(token),
-        getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
-      ])
-      setAllApplications(allData)
-      setApplications(filteredData)
-      alert('Application deferred to next year')
+      await deactivateApplication(token, confirmModal.app.id)
+      const data = await getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
+      setApplications(data)
+      setConfirmModal({ type: null, app: null })
+      toast.success('Application deactivated')
+    } catch (err) {
+      console.error('Failed to deactivate application:', err)
+      toast.error(err instanceof Error ? err.message : 'Failed to deactivate application')
+    } finally {
+      setConfirmLoading(false)
+    }
+  }
+
+  // Show defer confirmation modal (when 1+ declines exist)
+  const showDeferConfirm = (app: ApplicationWithUser) => {
+    setConfirmModal({ type: 'defer', app })
+  }
+
+  // Execute defer after confirmation
+  const executeDefer = async () => {
+    if (!token || !confirmModal.app) return
+
+    setConfirmLoading(true)
+    try {
+      await deferApplication(token, confirmModal.app.id)
+      const data = await getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
+      setApplications(data)
+      setConfirmModal({ type: null, app: null })
+      toast.success('Application deferred to next year')
     } catch (err) {
       console.error('Failed to defer application:', err)
-      alert(err instanceof Error ? err.message : 'Failed to defer application')
-    }
-  }
-
-  // Withdraw handler
-  const handleWithdrawApplication = async (applicationId: string) => {
-    if (!token) return
-
-    if (!confirm('Are you sure you want to withdraw this application?')) {
-      return
-    }
-
-    try {
-      await withdrawApplication(token, applicationId)
-      const [allData, filteredData] = await Promise.all([
-        getAllApplications(token),
-        getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
-      ])
-      setAllApplications(allData)
-      setApplications(filteredData)
-      alert('Application withdrawn')
-    } catch (err) {
-      console.error('Failed to withdraw application:', err)
-      alert(err instanceof Error ? err.message : 'Failed to withdraw application')
-    }
-  }
-
-  // Reject handler
-  const handleRejectApplication = async (applicationId: string) => {
-    if (!token) return
-
-    if (!confirm('Are you sure you want to reject this application? This action cannot be easily undone.')) {
-      return
-    }
-
-    try {
-      await rejectApplication(token, applicationId)
-      const [allData, filteredData] = await Promise.all([
-        getAllApplications(token),
-        getAllApplications(token, statusFilter || undefined, searchTerm || undefined)
-      ])
-      setAllApplications(allData)
-      setApplications(filteredData)
-      alert('Application rejected')
-    } catch (err) {
-      console.error('Failed to reject application:', err)
-      alert(err instanceof Error ? err.message : 'Failed to reject application')
+      toast.error(err instanceof Error ? err.message : 'Failed to defer application')
+    } finally {
+      setConfirmLoading(false)
     }
   }
 
@@ -504,172 +411,23 @@ function AdminApplicationsContent() {
 
   if (loading && applications.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-camp-green"></div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <AppHeader currentView="admin" />
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Applications</h1>
+        <p className="mt-2 text-gray-600">
+          Review and manage all camper applications
+        </p>
+      </div>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <h2 className="text-3xl font-bold text-camp-charcoal">
-              Welcome back, {user?.first_name}!
-            </h2>
-            <Hand className="h-8 w-8 text-camp-orange" />
-          </div>
-          <p className="text-gray-600">Here's an overview of all applications for this season.</p>
-        </div>
-
-        {/* Stats Cards - ORDER: Total, Applicants, Needs Review, Campers */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {/* 1. Total Applications */}
-          <Card
-            className={`border-l-4 border-l-camp-green hover:shadow-lg transition-all cursor-pointer ${statusFilter === '' ? 'ring-2 ring-camp-green ring-offset-2' : ''}`}
-            onClick={() => setStatusFilter('')}
-          >
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">Total Applications</p>
-                  <p className="text-3xl font-bold text-camp-charcoal">{allApplications.length}</p>
-                </div>
-                <div className="w-12 h-12 bg-camp-green/10 rounded-lg flex items-center justify-center">
-                  <svg className="w-6 h-6 text-camp-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 2. Applicants (status='applicant' with active sub_statuses) */}
-          <Card
-            className={`border-l-4 border-l-blue-500 hover:shadow-lg transition-all cursor-pointer group relative ${statusFilter === 'applicant' ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}
-            onClick={() => setStatusFilter('applicant')}
-          >
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm font-medium text-gray-600">Applicants</p>
-                    <div className="group/tooltip relative">
-                      <svg className="w-4 h-4 text-gray-400 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24" onClick={(e) => e.stopPropagation()}>
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
-                        Families still completing their application
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-3xl font-bold text-blue-600">
-                    {allApplications.filter(a => a.status === 'applicant' && ['not_started', 'incomplete', 'completed'].includes(a.sub_status)).length}
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 3. Needs Review (status='applicant' with sub_status='under_review' or 'waitlist') */}
-          <Card
-            className={`border-l-4 border-l-yellow-500 hover:shadow-lg transition-all cursor-pointer group relative ${statusFilter === 'applicant:under_review' ? 'ring-2 ring-yellow-500 ring-offset-2' : ''}`}
-            onClick={() => setStatusFilter('applicant:under_review')}
-          >
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm font-medium text-gray-600">Needs Review</p>
-                    <div className="group/tooltip relative">
-                      <svg className="w-4 h-4 text-gray-400 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24" onClick={(e) => e.stopPropagation()}>
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
-                        100% complete + admin has taken action (note, approve, or decline)
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-3xl font-bold text-yellow-600">
-                    {allApplications.filter(a => a.status === 'applicant' && ['under_review', 'waitlist'].includes(a.sub_status)).length}
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                  <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 4. Campers (status='camper') */}
-          <Card
-            className={`border-l-4 border-l-green-500 hover:shadow-lg transition-all cursor-pointer group relative ${statusFilter === 'camper' ? 'ring-2 ring-green-500 ring-offset-2' : ''}`}
-            onClick={() => setStatusFilter('camper')}
-          >
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm font-medium text-gray-600">Campers</p>
-                    <div className="group/tooltip relative">
-                      <svg className="w-4 h-4 text-gray-400 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24" onClick={(e) => e.stopPropagation()}>
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
-                        Promoted after 3 admin approvals
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-3xl font-bold text-green-600">
-                    {allApplications.filter(a => a.status === 'camper').length}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {allApplications.filter(a => a.status === 'camper' && a.paid_invoice === true).length} paid
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Status Flow Help */}
-        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <div className="text-sm text-blue-800">
-              <p className="font-medium mb-1">Application Status Flow</p>
-              <p className="text-blue-700">
-                <span className="font-medium">Applicant</span> (filling out form) →
-                <span className="font-medium"> Under Review</span> (100% complete + admin action) →
-                <span className="font-medium"> Camper</span> (3 approvals + promoted)
-              </p>
-              <p className="text-blue-600 text-xs mt-1">
-                Applications move to &quot;Under Review&quot; when they reach 100% and an admin leaves a note, approves, or declines.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Error Message */}
+      {/* Error Message */}
         {error && (
           <div className="mb-6 bg-red-50 border-l-4 border-l-red-500 text-red-800 px-4 py-3 rounded-lg flex items-center gap-3">
             <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -701,26 +459,27 @@ function AdminApplicationsContent() {
                   onChange={(e) => setStatusFilter(e.target.value)}
                   className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:border-camp-green focus:ring-2 focus:ring-camp-green/20 transition-colors bg-white min-w-[180px]"
                 >
-                  <option value="">All Statuses</option>
+                  <option value="open">All Open</option>
+                  <option value="">All (incl. Inactive)</option>
                   <optgroup label="Applicant">
                     <option value="applicant">All Applicants</option>
                     <option value="applicant:not_started">Not Started</option>
-                    <option value="applicant:incomplete">In Progress</option>
-                    <option value="applicant:completed">Complete</option>
+                    <option value="applicant:incomplete">Incomplete</option>
+                    <option value="applicant:complete">Complete</option>
                     <option value="applicant:under_review">Under Review</option>
                     <option value="applicant:waitlist">Waitlist</option>
                   </optgroup>
                   <optgroup label="Camper">
                     <option value="camper">All Campers</option>
-                    <option value="camper:incomplete">Camper - Incomplete</option>
-                    <option value="camper:complete:unpaid">Camper - Awaiting Payment</option>
-                    <option value="camper:complete:paid">Camper - Paid</option>
+                    <option value="camper:incomplete">Incomplete</option>
+                    <option value="camper:complete">Complete</option>
                   </optgroup>
                   <optgroup label="Inactive">
                     <option value="inactive">All Inactive</option>
-                    <option value="inactive:deferred">Deferred</option>
                     <option value="inactive:withdrawn">Withdrawn</option>
+                    <option value="inactive:deferred">Deferred</option>
                     <option value="inactive:rejected">Rejected</option>
+                    <option value="inactive:inactive">Deactivated</option>
                   </optgroup>
                 </select>
               </div>
@@ -792,8 +551,11 @@ function AdminApplicationsContent() {
                       <th className="text-left py-4 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[70px]">
                         Gender
                       </th>
+                      <th className="text-left py-4 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[80px]">
+                        BeST
+                      </th>
                       <th className="text-left py-4 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[90px]">
-                        Type
+                        Returning?
                       </th>
                       <th className="text-left py-4 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[90px]">
                         Paid Invoice
@@ -901,14 +663,28 @@ function AdminApplicationsContent() {
                             <span className="text-gray-400 text-sm">—</span>
                           )}
                         </td>
-                        {/* New/Returning */}
+                        {/* FASD BeST Score */}
+                        <td className="py-4 px-4 min-w-[80px]">
+                          {app.fasd_best_score != null ? (
+                            <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
+                              app.fasd_best_score <= 54 ? 'bg-green-100 text-green-700' :
+                              app.fasd_best_score <= 108 ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {app.fasd_best_score}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-sm">—</span>
+                          )}
+                        </td>
+                        {/* Returning Camper? */}
                         <td className="py-4 px-4 min-w-[90px]">
                           <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
                             app.is_returning_camper
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-sky-100 text-sky-700'
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-gray-100 text-gray-600'
                           }`}>
-                            {app.is_returning_camper ? 'Returning' : 'New'}
+                            {app.is_returning_camper ? 'True' : 'False'}
                           </span>
                         </td>
                         {/* Paid Invoice */}
@@ -927,12 +703,20 @@ function AdminApplicationsContent() {
                         </td>
                         {/* Status - Just Applicant/Camper/Inactive */}
                         <td className="py-4 px-4 min-w-[100px]">
-                          {getStatusCategoryBadge(app.status)}
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mr-2"
+                            style={getCategoryStyle(app.status)}
+                          >
+                            {getCategoryColor(app.status).label}
+                          </span>
                         </td>
                         {/* Stage - Sub-status */}
                         <td className="py-4 px-4 min-w-[120px]">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadgeColor(app.status, app.sub_status, app.paid_invoice)}`}>
-                            {formatStatusDisplay(app.status, app.sub_status, app.paid_invoice)}
+                          <span
+                            className="inline-flex items-center justify-center px-2.5 py-1 text-xs font-semibold rounded-full whitespace-nowrap"
+                            style={getStatusStyle(app.status, app.sub_status)}
+                          >
+                            {getStatusColor(app.status, app.sub_status).label}
                           </span>
                         </td>
                         {/* Progress */}
@@ -959,14 +743,19 @@ function AdminApplicationsContent() {
                             </div>
                             {app.approved_by_teams && app.approved_by_teams.length > 0 && (
                               <div className="flex flex-wrap gap-0.5">
-                                {app.approved_by_teams.map((team, idx) => (
-                                  <span
-                                    key={idx}
-                                    className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-green-100 text-green-800"
-                                  >
-                                    {team}
-                                  </span>
-                                ))}
+                                {app.approved_by_teams.map((team, idx) => {
+                                  const teamColor = getTeamColor(team)
+                                  return (
+                                    <span
+                                      key={idx}
+                                      className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded"
+                                      style={getTeamStyle(team)}
+                                      title={teamColor.name}
+                                    >
+                                      {teamColor.name}
+                                    </span>
+                                  )
+                                })}
                               </div>
                             )}
                           </div>
@@ -978,184 +767,19 @@ function AdminApplicationsContent() {
                           </div>
                         </td>
                         {/* Sticky right: Actions */}
-                        <td className="py-4 px-4 sticky right-0 bg-white group-hover:bg-gray-50 z-10 min-w-[200px] shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => router.push(`/admin/applications/${app.id}`)}
-                              className="font-medium whitespace-nowrap text-xs px-2 py-1"
-                            >
-                              {app.status === 'applicant' ? '📋 Review' : '👁️ View'}
-                            </Button>
-
-                            {/* Notes button with count badge */}
-                            <button
-                              onClick={() => openNotesModal(app)}
-                              className="relative p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-                              title={`${app.note_count || 0} notes`}
-                            >
-                              <MessageSquare className="w-4 h-4 text-gray-500 hover:text-camp-green transition-colors" />
-                              {(app.note_count || 0) > 0 && (
-                                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center text-xs font-bold text-white bg-camp-green rounded-full px-1">
-                                  {app.note_count}
-                                </span>
-                              )}
-                            </button>
-
-                            {/* Status-specific primary action */}
-                            {/* Super admins can always Accept completed/under_review applicants */}
-                            {user?.role === 'super_admin' && app.status === 'applicant' && ['completed', 'under_review'].includes(app.sub_status) && (
-                              <Button
-                                variant="primary"
-                                size="sm"
-                                onClick={() => handlePromoteToCamper(app.id)}
-                                className="font-medium whitespace-nowrap text-xs px-2 py-1"
-                              >
-                                ✓ Accept
-                              </Button>
-                            )}
-
-                            {/* Regular admins see Approve button when < 3 approvals */}
-                            {user?.role !== 'super_admin' && app.status === 'applicant' && ['completed', 'under_review'].includes(app.sub_status) && (app.approval_count || 0) < 3 && (
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => handleApprove(app.id)}
-                                className="font-medium whitespace-nowrap text-xs px-2 py-1"
-                              >
-                                👍 {app.approval_count || 0}/3
-                              </Button>
-                            )}
-
-                            {/* Regular admins see Accept when 3+ approvals */}
-                            {user?.role !== 'super_admin' && app.status === 'applicant' && ['completed', 'under_review'].includes(app.sub_status) && (app.approval_count || 0) >= 3 && (
-                              <Button
-                                variant="primary"
-                                size="sm"
-                                onClick={() => handlePromoteToCamper(app.id)}
-                                className="font-medium whitespace-nowrap text-xs px-2 py-1"
-                              >
-                                ✓ Accept
-                              </Button>
-                            )}
-
-                            {/* Applicant on waitlist can be promoted */}
-                            {app.status === 'applicant' && app.sub_status === 'waitlist' && (
-                              <Button
-                                variant="primary"
-                                size="sm"
-                                onClick={() => handleRemoveFromWaitlist(app.id, 'promote')}
-                                className="font-medium whitespace-nowrap text-xs px-2 py-1"
-                              >
-                                ✓ Accept
-                              </Button>
-                            )}
-
-                            {/* Camper payment status indicators */}
-                            {app.status === 'camper' && app.paid_invoice !== true && (
-                              <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full bg-rose-100 text-rose-800">
-                                Awaiting Payment
-                              </span>
-                            )}
-
-                            {app.status === 'camper' && app.paid_invoice === true && (
-                              <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
-                                ✓ Paid
-                              </span>
-                            )}
-
-                            {/* Inactive status indicators */}
-                            {app.status === 'inactive' && app.sub_status === 'deferred' && (
-                              <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-600">
-                                Deferred
-                              </span>
-                            )}
-
-                            {app.status === 'inactive' && app.sub_status === 'withdrawn' && (
-                              <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-500">
-                                Withdrawn
-                              </span>
-                            )}
-
-                            {app.status === 'inactive' && app.sub_status === 'rejected' && (
-                              <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
-                                Rejected
-                              </span>
-                            )}
-
-                            {/* Dropdown menu for additional actions (only for non-terminal statuses) */}
-                            {!(app.status === 'inactive' || (app.status === 'camper' && app.paid_invoice === true)) && (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-48">
-                                  {/* Under Review actions */}
-                                  {app.status === 'applicant' && app.sub_status === 'under_review' && (
-                                    <>
-                                      <DropdownMenuItem
-                                        onClick={() => handleAddToWaitlist(app.id)}
-                                        className="cursor-pointer"
-                                      >
-                                        <Clock className="mr-2 h-4 w-4 text-orange-500" />
-                                        Add to Waitlist
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        onClick={() => handleRejectApplication(app.id)}
-                                        className="cursor-pointer text-red-600"
-                                      >
-                                        <XCircle className="mr-2 h-4 w-4" />
-                                        Reject
-                                      </DropdownMenuItem>
-                                      <DropdownMenuSeparator />
-                                    </>
-                                  )}
-
-                                  {/* Waitlist actions */}
-                                  {app.status === 'applicant' && app.sub_status === 'waitlist' && (
-                                    <>
-                                      <DropdownMenuItem
-                                        onClick={() => handleRemoveFromWaitlist(app.id, 'return_review')}
-                                        className="cursor-pointer"
-                                      >
-                                        <ArrowRightCircle className="mr-2 h-4 w-4 text-blue-500" />
-                                        Return to Review
-                                      </DropdownMenuItem>
-                                      <DropdownMenuSeparator />
-                                    </>
-                                  )}
-
-                                  {/* Camper actions (unpaid only) */}
-                                  {app.status === 'camper' && app.paid_invoice !== true && (
-                                    <>
-                                      <DropdownMenuItem
-                                        onClick={() => handleWithdrawApplication(app.id)}
-                                        className="cursor-pointer"
-                                      >
-                                        <XCircle className="mr-2 h-4 w-4 text-gray-500" />
-                                        Withdraw
-                                      </DropdownMenuItem>
-                                      <DropdownMenuSeparator />
-                                    </>
-                                  )}
-
-                                  {/* Defer is available for applicants and unpaid campers */}
-                                  {(app.status === 'applicant' || (app.status === 'camper' && app.paid_invoice !== true)) && (
-                                    <DropdownMenuItem
-                                      onClick={() => handleDeferApplication(app.id)}
-                                      className="cursor-pointer text-slate-600"
-                                    >
-                                      <CalendarX className="mr-2 h-4 w-4" />
-                                      Defer to Next Year
-                                    </DropdownMenuItem>
-                                  )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                          </div>
+                        <td className="py-4 px-4 sticky right-0 bg-white group-hover:bg-gray-50 z-10 min-w-[220px] shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                          <ApplicationActionStrip
+                            app={app}
+                            userRole={user?.role}
+                            onOpenNotes={openNotesModal}
+                            onOpenEmail={openEmailModal}
+                            onPromote={showPromoteConfirm}
+                            onApprove={handleApprove}
+                            onWaitlist={showWaitlistConfirm}
+                            onRemoveWaitlist={showRemoveWaitlistConfirm}
+                            onDeactivate={showDeactivateConfirm}
+                            onDefer={showDeferConfirm}
+                          />
                         </td>
                       </tr>
                     ))}
@@ -1165,7 +789,6 @@ function AdminApplicationsContent() {
             )}
           </CardContent>
         </Card>
-      </main>
 
       {/* Notes Modal */}
       {selectedAppForNotes && token && (
@@ -1181,6 +804,237 @@ function AdminApplicationsContent() {
           onNoteAdded={handleNoteAdded}
         />
       )}
+
+      {/* Email Family Dialog */}
+      <Dialog open={emailModalOpen} onOpenChange={setEmailModalOpen}>
+        <DialogContent className="sm:max-w-[550px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-camp-green" />
+              Email Family
+            </DialogTitle>
+            <DialogDescription>
+              {selectedAppForEmail && (
+                <>
+                  Send an email to{' '}
+                  <span className="font-medium text-gray-800">{selectedAppForEmail.user?.first_name} {selectedAppForEmail.user?.last_name}</span>
+                  {' '}regarding{' '}
+                  <span className="font-medium text-gray-800">
+                    {selectedAppForEmail.camper_first_name && selectedAppForEmail.camper_last_name
+                      ? `${selectedAppForEmail.camper_first_name} ${selectedAppForEmail.camper_last_name}`
+                      : 'their camper'}
+                  </span>'s application.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+              <input
+                type="text"
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-camp-green focus:border-transparent"
+                placeholder="Email subject..."
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+              <textarea
+                value={emailMessage}
+                onChange={(e) => setEmailMessage(e.target.value)}
+                rows={6}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-camp-green focus:border-transparent resize-none"
+                placeholder="Type your message here..."
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                The message will be wrapped in CAMP's branded email template with logo and contact info.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEmailModalOpen(false)}
+              disabled={emailSending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendEmail}
+              disabled={emailSending || !emailSubject.trim() || !emailMessage.trim()}
+              className="bg-camp-green hover:bg-camp-green/90"
+            >
+              {emailSending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="mr-2 h-4 w-4" />
+                  Send Email
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation Modals */}
+      {/* Promote to Camper */}
+      <ConfirmationModal
+        isOpen={confirmModal.type === 'promote'}
+        onClose={() => setConfirmModal({ type: null, app: null })}
+        onConfirm={executePromoteToCamper}
+        title="Accept as Camper"
+        message={
+          <>
+            Are you sure you want to accept{' '}
+            <span className="font-semibold">
+              {confirmModal.app?.camper_first_name} {confirmModal.app?.camper_last_name}
+            </span>{' '}
+            as a camper?
+            <div className="mt-3 p-3 bg-green-50 rounded-lg text-xs text-green-800">
+              <p className="font-medium mb-1">This action will:</p>
+              <ul className="list-disc list-inside space-y-0.5">
+                <li>Generate a payment invoice</li>
+                <li>Send an acceptance email with payment link</li>
+                <li>Enable additional post-acceptance sections</li>
+              </ul>
+            </div>
+          </>
+        }
+        confirmLabel="Accept"
+        theme="success"
+        isLoading={confirmLoading}
+      />
+
+      {/* Add to Waitlist */}
+      <ConfirmationModal
+        isOpen={confirmModal.type === 'waitlist'}
+        onClose={() => setConfirmModal({ type: null, app: null })}
+        onConfirm={executeAddToWaitlist}
+        title="Add to Waitlist"
+        message={
+          <>
+            Are you sure you want to add{' '}
+            <span className="font-semibold">
+              {confirmModal.app?.camper_first_name} {confirmModal.app?.camper_last_name}
+            </span>{' '}
+            to the waitlist?
+            <div className="mt-3 p-3 bg-purple-50 rounded-lg text-xs text-purple-800">
+              <p>The family will be notified that acceptance is delayed due to staffing constraints. They can still be promoted to camper status later.</p>
+            </div>
+          </>
+        }
+        confirmLabel="Add to Waitlist"
+        theme="purple"
+        isLoading={confirmLoading}
+      />
+
+      {/* Remove from Waitlist */}
+      <ConfirmationModal
+        isOpen={confirmModal.type === 'removeWaitlist'}
+        onClose={() => setConfirmModal({ type: null, app: null })}
+        onConfirm={executeRemoveFromWaitlist}
+        title={confirmModal.action === 'promote' ? 'Accept from Waitlist' : 'Return to Review'}
+        message={
+          confirmModal.action === 'promote' ? (
+            <>
+              Are you sure you want to accept{' '}
+              <span className="font-semibold">
+                {confirmModal.app?.camper_first_name} {confirmModal.app?.camper_last_name}
+              </span>{' '}
+              from the waitlist as a camper?
+              <div className="mt-3 p-3 bg-green-50 rounded-lg text-xs text-green-800">
+                <p className="font-medium mb-1">This action will:</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  <li>Remove from waitlist</li>
+                  <li>Generate a payment invoice</li>
+                  <li>Send an acceptance email with payment link</li>
+                </ul>
+              </div>
+            </>
+          ) : (
+            <>
+              Are you sure you want to return{' '}
+              <span className="font-semibold">
+                {confirmModal.app?.camper_first_name} {confirmModal.app?.camper_last_name}
+              </span>{' '}
+              to review status?
+              <div className="mt-3 p-3 bg-blue-50 rounded-lg text-xs text-blue-800">
+                <p>This will remove them from the waitlist and set their status back to "Under Review".</p>
+              </div>
+            </>
+          )
+        }
+        confirmLabel={confirmModal.action === 'promote' ? 'Accept' : 'Return to Review'}
+        theme={confirmModal.action === 'promote' ? 'success' : 'info'}
+        isLoading={confirmLoading}
+      />
+
+      {/* Deactivate */}
+      <ConfirmationModal
+        isOpen={confirmModal.type === 'deactivate'}
+        onClose={() => setConfirmModal({ type: null, app: null })}
+        onConfirm={executeDeactivate}
+        title="Deactivate Application"
+        message={
+          <>
+            Are you sure you want to deactivate{' '}
+            <span className="font-semibold">
+              {confirmModal.app?.camper_first_name} {confirmModal.app?.camper_last_name}
+            </span>'s application?
+            <div className="mt-3 p-3 bg-amber-50 rounded-lg text-xs text-amber-800">
+              <p className="font-medium mb-1">This action will:</p>
+              <ul className="list-disc list-inside space-y-0.5">
+                <li>Hide the application from default views</li>
+                <li>Mark the application as inactive</li>
+                <li>The application can still be viewed in the "Inactive" filter</li>
+              </ul>
+            </div>
+          </>
+        }
+        confirmLabel="Deactivate"
+        theme="warning"
+        isLoading={confirmLoading}
+      />
+
+      {/* Defer to Next Year */}
+      <ConfirmationModal
+        isOpen={confirmModal.type === 'defer'}
+        onClose={() => setConfirmModal({ type: null, app: null })}
+        onConfirm={executeDefer}
+        title="Defer to Next Year"
+        message={
+          <>
+            Are you sure you want to defer{' '}
+            <span className="font-semibold">
+              {confirmModal.app?.camper_first_name} {confirmModal.app?.camper_last_name}
+            </span>'s application to next year?
+            <div className="mt-3 p-3 bg-amber-50 rounded-lg text-xs text-amber-800">
+              <p className="font-medium mb-1">This action will:</p>
+              <ul className="list-disc list-inside space-y-0.5">
+                <li>Move application to <strong>Inactive → Deferred</strong> status</li>
+                <li>The family can reapply next year</li>
+                <li>A deferral notification will be sent to the family</li>
+              </ul>
+            </div>
+            {confirmModal.app?.decline_count && confirmModal.app.decline_count > 0 && (
+              <div className="mt-2 p-2 bg-red-50 rounded text-xs text-red-700">
+                <strong>Note:</strong> This application has {confirmModal.app.decline_count} decline{confirmModal.app.decline_count > 1 ? 's' : ''} from the review team.
+              </div>
+            )}
+          </>
+        }
+        confirmLabel="Defer Application"
+        theme="warning"
+        isLoading={confirmLoading}
+      />
     </div>
   )
 }

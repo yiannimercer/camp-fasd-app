@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/contexts/AuthContext'
 import Link from 'next/link'
-import { Home, Users, UsersRound, FileEdit, Settings, Mail, ClipboardList, ClipboardCheck, LucideIcon } from 'lucide-react'
+import { Home, Users, UsersRound, FileEdit, Settings, Mail, ClipboardList, ClipboardCheck, Palette, LucideIcon } from 'lucide-react'
 import { AppHeader } from '@/components/shared/AppHeader'
 
 // Navigation items defined outside component to prevent recreation
@@ -46,8 +46,14 @@ const navigationItems: { name: string; href: string; icon: LucideIcon; section: 
     section: 'settings',
   },
   {
-    name: 'Email Templates',
-    href: '/super-admin/email-templates',
+    name: 'Application Management',
+    href: '/super-admin/application-management',
+    icon: Palette,
+    section: 'appearance',
+  },
+  {
+    name: 'Email Communication',
+    href: '/super-admin/email-communication',
     icon: Mail,
     section: 'email',
   },
@@ -132,7 +138,7 @@ export default function SuperAdminLayout({
           </div>
 
           {/* Main Content */}
-          <div className="flex-1">
+          <div className="flex-1 min-w-0 overflow-hidden">
             {children}
           </div>
         </div>

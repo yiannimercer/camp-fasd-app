@@ -5,6 +5,17 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 // Types
+// Section header for grouping questions within a section
+export interface SectionHeader {
+  id: string
+  section_id: string
+  header_text: string
+  order_index: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface ApplicationSection {
   id: string
   title: string
@@ -14,9 +25,11 @@ export interface ApplicationSection {
   visible_before_acceptance: boolean
   show_when_status: string | null  // Sub-status requirement for visibility
   required_status: string | null   // NULL=all, 'applicant'=applicant only, 'camper'=camper only
+  score_calculation_type: string | null  // e.g., 'fasd_best' for FASD BeST score calculation
   created_at: string
   updated_at: string
   questions: ApplicationQuestion[]
+  headers: SectionHeader[]  // Section sub-headers for grouping questions
 }
 
 export interface ApplicationQuestion {
@@ -228,6 +241,59 @@ export async function getApplicationProgress(
 
   if (!response.ok) {
     throw new Error('Failed to fetch application progress')
+  }
+
+  return response.json()
+}
+
+/**
+ * Reactivate a deactivated application
+ * Sets status back to 'applicant' and determines appropriate sub_status
+ * based on current response state (not_started, incomplete, or complete)
+ */
+export async function reactivateApplication(
+  token: string,
+  applicationId: string
+): Promise<Application> {
+  const response = await fetch(`${API_URL}/api/applications/${applicationId}/reactivate`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to reactivate application')
+  }
+
+  return response.json()
+}
+
+/**
+ * Withdraw an application (family-initiated)
+ * Sets status to inactive with sub_status 'withdrawn'
+ */
+export async function withdrawApplication(
+  token: string,
+  applicationId: string
+): Promise<{
+  message: string
+  application_id: string
+  status: string
+  sub_status: string
+  withdrawn_at: string
+}> {
+  const response = await fetch(`${API_URL}/api/applications/${applicationId}/withdraw`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to withdraw application')
   }
 
   return response.json()

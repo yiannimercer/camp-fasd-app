@@ -12,6 +12,14 @@ ENV/
 # Data
 feedback/*
 CLAUDE_BETA_FEEDBACK.md
+YM NOTES.md
+LLM_CONTEXT.md
+CVcamper_export_2025-12-29.json
+application_questions_export.csv
+TODO.md
+/migration-data
+/docs/
+/scripts/*.md
 
 # Environment variables
 .env
@@ -54,3 +62,7 @@ coverage/
 
 # Claude Code
 .mcp.json
+
+# Supabase folders
+**/supabase/.temp/
+supabase/supabase/

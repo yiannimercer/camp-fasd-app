@@ -337,6 +337,7 @@ export async function withdrawApplication(
 /**
  * Reject an application
  * Can only be done from Tier 1 statuses
+ * @deprecated Use deactivateApplication instead
  */
 export async function rejectApplication(
   token: string,
@@ -357,6 +358,35 @@ export async function rejectApplication(
   if (!response.ok) {
     const error = await response.json()
     throw new Error(error.detail || 'Failed to reject application')
+  }
+
+  return response.json()
+}
+
+/**
+ * Deactivate an application
+ * Sets status to 'inactive' - hides from default views
+ * Can be used for withdrawals, deferrals, or any admin-initiated closure
+ */
+export async function deactivateApplication(
+  token: string,
+  applicationId: string
+): Promise<{
+  message: string
+  application_id: string
+  status: string
+  deactivated_at: string
+}> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/applications/${applicationId}/deactivate`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to deactivate application')
   }
 
   return response.json()

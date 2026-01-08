@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useToast } from '@/components/shared/ToastNotification';
+import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import FieldConfigurator, { FieldConfig } from '@/components/FieldConfigurator';
 import { Label } from '@/components/ui/label';
@@ -143,6 +145,7 @@ const DEFAULT_ALLERGY_FIELDS: FieldConfig[] = [
 
 export default function ApplicationBuilderPage() {
   const { token } = useAuth();
+  const toast = useToast();
   const [sections, setSections] = useState<Section[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSection, setSelectedSection] = useState<Section | null>(null);
@@ -157,6 +160,17 @@ export default function ApplicationBuilderPage() {
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [draggedItem, setDraggedItem] = useState<{ sectionId: string; itemIndex: number; itemType: 'question' | 'header' } | null>(null);
+
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState<{
+    type: 'section' | 'question' | 'header' | null;
+    sectionId?: string;
+    questionId?: string;
+    headerId?: string;
+    sectionTitle?: string;
+    questionTitle?: string;
+    headerTitle?: string;
+  }>({ type: null });
 
   // Section form state
   const [sectionForm, setSectionForm] = useState({
@@ -272,18 +286,21 @@ export default function ApplicationBuilderPage() {
     }
   };
 
-  const handleDeleteSection = async (sectionId: string) => {
-    if (!token) return;
-    if (!confirm('Are you sure you want to delete this section? All questions in this section will also be deleted.')) return;
+  const showDeleteSectionModal = (sectionId: string, sectionTitle: string) => {
+    setDeleteModal({ type: 'section', sectionId, sectionTitle });
+  };
+
+  const handleDeleteSection = async () => {
+    if (!token || !deleteModal.sectionId) return;
 
     try {
-      await deleteSection(token, sectionId);
-      setSections(prev => prev.filter(s => s.id !== sectionId));
-      setSaveStatus('success');
-      setTimeout(() => setSaveStatus('idle'), 3000);
+      await deleteSection(token, deleteModal.sectionId);
+      setSections(prev => prev.filter(s => s.id !== deleteModal.sectionId));
+      toast.success('Section deleted successfully');
+      setDeleteModal({ type: null });
     } catch (error) {
       console.error('Failed to delete section:', error);
-      setSaveStatus('error');
+      toast.error('Failed to delete section');
     }
   };
 
@@ -321,8 +338,8 @@ export default function ApplicationBuilderPage() {
     try {
       setSaving(true);
 
-      // Question types that support options
-      const optionTypes = ['dropdown', 'multiple_choice', 'checkbox'];
+      // Question types that support options (including medication/allergy/table which store field configs in options)
+      const optionTypes = ['dropdown', 'multiple_choice', 'checkbox', 'medication_list', 'allergy_list', 'table'];
       const supportsOptions = optionTypes.includes(questionForm.question_type || '');
 
       if (editingQuestionId) {
@@ -405,26 +422,29 @@ export default function ApplicationBuilderPage() {
     }
   };
 
-  const handleDeleteQuestion = async (sectionId: string, questionId: string) => {
-    if (!token) return;
-    if (!confirm('Are you sure you want to delete this question?')) return;
+  const showDeleteQuestionModal = (sectionId: string, questionId: string, questionTitle: string) => {
+    setDeleteModal({ type: 'question', sectionId, questionId, questionTitle });
+  };
+
+  const handleDeleteQuestion = async () => {
+    if (!token || !deleteModal.sectionId || !deleteModal.questionId) return;
 
     try {
-      await deleteQuestion(token, questionId);
+      await deleteQuestion(token, deleteModal.questionId);
       setSections(prev =>
         prev.map(section => {
-          if (section.id !== sectionId) return section;
+          if (section.id !== deleteModal.sectionId) return section;
           return {
             ...section,
-            questions: section.questions.filter(q => q.id !== questionId),
+            questions: section.questions.filter(q => q.id !== deleteModal.questionId),
           };
         })
       );
-      setSaveStatus('success');
-      setTimeout(() => setSaveStatus('idle'), 3000);
+      toast.success('Question deleted successfully');
+      setDeleteModal({ type: null });
     } catch (error) {
       console.error('Failed to delete question:', error);
-      setSaveStatus('error');
+      toast.error('Failed to delete question');
     }
   };
 
@@ -539,26 +559,29 @@ export default function ApplicationBuilderPage() {
     }
   };
 
-  const handleDeleteHeader = async (sectionId: string, headerId: string) => {
-    if (!token) return;
-    if (!confirm('Are you sure you want to delete this header?')) return;
+  const showDeleteHeaderModal = (sectionId: string, headerId: string, headerTitle: string) => {
+    setDeleteModal({ type: 'header', sectionId, headerId, headerTitle });
+  };
+
+  const handleDeleteHeader = async () => {
+    if (!token || !deleteModal.sectionId || !deleteModal.headerId) return;
 
     try {
-      await deleteHeader(token, headerId);
+      await deleteHeader(token, deleteModal.headerId);
       setSections(prev =>
         prev.map(section => {
-          if (section.id !== sectionId) return section;
+          if (section.id !== deleteModal.sectionId) return section;
           return {
             ...section,
-            headers: section.headers.filter(h => h.id !== headerId),
+            headers: section.headers.filter(h => h.id !== deleteModal.headerId),
           };
         })
       );
-      setSaveStatus('success');
-      setTimeout(() => setSaveStatus('idle'), 3000);
+      toast.success('Header deleted successfully');
+      setDeleteModal({ type: null });
     } catch (error) {
       console.error('Failed to delete header:', error);
-      setSaveStatus('error');
+      toast.error('Failed to delete header');
     }
   };
 
@@ -634,8 +657,8 @@ export default function ApplicationBuilderPage() {
       newSections[sectionIndex] = { ...section, questions: newQuestions };
       setSections(newSections);
 
-      // Save new order to backend
-      await reorderQuestions(token, newQuestions.map(q => q.id));
+      // Save new order to backend - pass {id, order_index} pairs
+      await reorderQuestions(token, newQuestions.map(q => ({ id: q.id, order_index: q.order_index })));
     } catch (error) {
       console.error('Failed to reorder questions:', error);
       // Reload sections on error
@@ -668,8 +691,8 @@ export default function ApplicationBuilderPage() {
       newSections[sectionIndex] = { ...section, questions: newQuestions };
       setSections(newSections);
 
-      // Save new order to backend
-      await reorderQuestions(token, newQuestions.map(q => q.id));
+      // Save new order to backend - pass {id, order_index} pairs
+      await reorderQuestions(token, newQuestions.map(q => ({ id: q.id, order_index: q.order_index })));
     } catch (error) {
       console.error('Failed to reorder questions:', error);
       // Reload sections on error
@@ -712,10 +735,10 @@ export default function ApplicationBuilderPage() {
     // Update state
     setSections(prev => prev.map(s => s.id === sectionId ? { ...s, headers: newHeaders, questions: newQuestions } : s));
 
-    // Save to backend
+    // Save to backend - pass {id, order_index} pairs for unified ordering
     try {
-      await reorderHeaders(token, newHeaders.map(h => h.id));
-      await reorderQuestions(token, newQuestions.map(q => q.id));
+      await reorderHeaders(token, newHeaders.map(h => ({ id: h.id, order_index: h.order_index })));
+      await reorderQuestions(token, newQuestions.map(q => ({ id: q.id, order_index: q.order_index })));
     } catch (error) {
       console.error('Failed to reorder items:', error);
       const data = await getSections(token, true);
@@ -749,10 +772,10 @@ export default function ApplicationBuilderPage() {
     // Update state
     setSections(prev => prev.map(s => s.id === sectionId ? { ...s, headers: newHeaders, questions: newQuestions } : s));
 
-    // Save to backend
+    // Save to backend - pass {id, order_index} pairs for unified ordering
     try {
-      await reorderHeaders(token, newHeaders.map(h => h.id));
-      await reorderQuestions(token, newQuestions.map(q => q.id));
+      await reorderHeaders(token, newHeaders.map(h => ({ id: h.id, order_index: h.order_index })));
+      await reorderQuestions(token, newQuestions.map(q => ({ id: q.id, order_index: q.order_index })));
     } catch (error) {
       console.error('Failed to reorder items:', error);
       const data = await getSections(token, true);
@@ -811,9 +834,9 @@ export default function ApplicationBuilderPage() {
       // Update state
       setSections(prev => prev.map(s => s.id === sectionId ? { ...s, headers: newHeaders, questions: newQuestions } : s));
 
-      // Save new order to backend
-      await reorderHeaders(token, newHeaders.map(h => h.id));
-      await reorderQuestions(token, newQuestions.map(q => q.id));
+      // Save new order to backend - pass {id, order_index} pairs for unified ordering
+      await reorderHeaders(token, newHeaders.map(h => ({ id: h.id, order_index: h.order_index })));
+      await reorderQuestions(token, newQuestions.map(q => ({ id: q.id, order_index: q.order_index })));
     } catch (error) {
       console.error('Failed to reorder items:', error);
       // Reload sections on error
@@ -989,7 +1012,7 @@ export default function ApplicationBuilderPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleDeleteSection(section.id)}
+                    onClick={() => showDeleteSectionModal(section.id, section.title)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -1014,68 +1037,81 @@ export default function ApplicationBuilderPage() {
                           onDragOver={handleItemDragOver}
                           onDrop={() => handleItemDrop(section.id, itemIndex)}
                           onDragEnd={handleItemDragEnd}
-                          className={`flex items-start gap-3 p-4 bg-amber-50 rounded-lg border-2 border-amber-300 transition-all cursor-move ${
+                          className={`group relative rounded-lg transition-all cursor-move ${
                             draggedItem?.sectionId === section.id && draggedItem?.itemIndex === itemIndex
-                              ? 'opacity-50 border-dashed'
-                              : 'hover:bg-amber-100'
+                              ? 'opacity-50'
+                              : ''
                           }`}
                         >
-                          <GripVertical className="h-5 w-5 text-amber-600 mt-1 cursor-grab active:cursor-grabbing" />
-                          <div className="flex-1">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                  <p className="text-lg font-bold text-amber-900">
-                                    {header.header_text}
-                                  </p>
-                                  {!header.is_active && (
-                                    <Badge variant="secondary" className="text-xs">Inactive</Badge>
-                                  )}
-                                </div>
-                                <p className="text-xs text-amber-700 mt-1">
-                                  Section Header - Questions below will be grouped under this
-                                </p>
+                          {/* Sub-section divider header with left accent bar */}
+                          <div className={`flex items-center gap-3 py-3 px-4 bg-gradient-to-r from-amber-50 to-orange-50/50 border border-amber-200/60 rounded-lg shadow-sm ${
+                            draggedItem?.sectionId === section.id && draggedItem?.itemIndex === itemIndex
+                              ? 'border-dashed border-amber-400'
+                              : 'hover:shadow-md hover:border-amber-300'
+                          }`}>
+                            {/* Left accent bar */}
+                            <div className="absolute left-0 top-2 bottom-2 w-1 bg-gradient-to-b from-amber-400 to-orange-400 rounded-full" />
+
+                            {/* Drag handle */}
+                            <GripVertical className="h-5 w-5 text-amber-500/70 cursor-grab active:cursor-grabbing flex-shrink-0 ml-1" />
+
+                            {/* Header content */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-base font-semibold text-amber-900 tracking-tight">
+                                  {header.header_text}
+                                </h4>
+                                {!header.is_active && (
+                                  <Badge variant="outline" className="text-xs bg-gray-100 text-gray-500 border-gray-300">
+                                    Inactive
+                                  </Badge>
+                                )}
                               </div>
-                              <div className="flex gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => moveItemUp(section.id, itemIndex)}
-                                  disabled={itemIndex === 0}
-                                  title="Move up"
-                                  className="hover:bg-amber-100"
-                                >
-                                  <MoveUp className="h-3 w-3 text-amber-700" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => moveItemDown(section.id, itemIndex)}
-                                  disabled={itemIndex === items.length - 1}
-                                  title="Move down"
-                                  className="hover:bg-amber-100"
-                                >
-                                  <MoveDown className="h-3 w-3 text-amber-700" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleEditHeader(section.id, header)}
-                                  title="Edit header"
-                                  className="hover:bg-amber-100"
-                                >
-                                  <Edit className="h-3 w-3 text-amber-700" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDeleteHeader(section.id, header.id)}
-                                  title="Delete header"
-                                  className="hover:bg-amber-100"
-                                >
-                                  <Trash2 className="h-3 w-3 text-amber-700" />
-                                </Button>
-                              </div>
+                              <p className="text-xs text-amber-600/80 mt-0.5">
+                                Section Header - Questions below will be grouped under this
+                              </p>
+                            </div>
+
+                            {/* Action buttons - appear on hover */}
+                            <div className="flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => moveItemUp(section.id, itemIndex)}
+                                disabled={itemIndex === 0}
+                                title="Move up"
+                                className="h-7 w-7 p-0 hover:bg-amber-100/80"
+                              >
+                                <MoveUp className="h-3.5 w-3.5 text-amber-700" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => moveItemDown(section.id, itemIndex)}
+                                disabled={itemIndex === items.length - 1}
+                                title="Move down"
+                                className="h-7 w-7 p-0 hover:bg-amber-100/80"
+                              >
+                                <MoveDown className="h-3.5 w-3.5 text-amber-700" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEditHeader(section.id, header)}
+                                title="Edit header"
+                                className="h-7 w-7 p-0 hover:bg-amber-100/80"
+                              >
+                                <Edit className="h-3.5 w-3.5 text-amber-700" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => showDeleteHeaderModal(section.id, header.id, header.header_text)}
+                                title="Delete header"
+                                className="h-7 w-7 p-0 hover:bg-red-100/80"
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                              </Button>
                             </div>
                           </div>
                         </div>
@@ -1236,7 +1272,7 @@ export default function ApplicationBuilderPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDeleteQuestion(section.id, question.id)}
+                              onClick={() => showDeleteQuestionModal(section.id, question.id, question.question_text)}
                               title="Delete question"
                             >
                               <Trash2 className="h-3 w-3" />
@@ -1987,6 +2023,61 @@ export default function ApplicationBuilderPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Section Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={deleteModal.type === 'section'}
+        onClose={() => setDeleteModal({ type: null })}
+        onConfirm={handleDeleteSection}
+        title="Delete Section"
+        message={
+          <>
+            Are you sure you want to delete{' '}
+            <span className="font-semibold">"{deleteModal.sectionTitle}"</span>?
+            <div className="mt-3 p-3 bg-red-50 rounded-lg text-xs text-red-800">
+              <p>All questions in this section will also be deleted. This action cannot be undone.</p>
+            </div>
+          </>
+        }
+        confirmLabel="Delete Section"
+        theme="danger"
+      />
+
+      {/* Delete Question Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={deleteModal.type === 'question'}
+        onClose={() => setDeleteModal({ type: null })}
+        onConfirm={handleDeleteQuestion}
+        title="Delete Question"
+        message={
+          <>
+            Are you sure you want to delete this question?
+            <div className="mt-2 p-2 bg-gray-50 rounded text-sm text-gray-700 font-medium truncate">
+              "{deleteModal.questionTitle}"
+            </div>
+          </>
+        }
+        confirmLabel="Delete Question"
+        theme="danger"
+      />
+
+      {/* Delete Header Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={deleteModal.type === 'header'}
+        onClose={() => setDeleteModal({ type: null })}
+        onConfirm={handleDeleteHeader}
+        title="Delete Header"
+        message={
+          <>
+            Are you sure you want to delete this header?
+            <div className="mt-2 p-2 bg-gray-50 rounded text-sm text-gray-700 font-medium truncate">
+              "{deleteModal.headerTitle}"
+            </div>
+          </>
+        }
+        confirmLabel="Delete Header"
+        theme="danger"
+      />
     </div>
   );
 }

@@ -21,6 +21,7 @@ class ApplicationSection(Base):
     visible_before_acceptance = Column(Boolean, default=True, server_default="true")
     show_when_status = Column(String(20), nullable=True)  # Sub-status requirement for visibility
     required_status = Column(String(50), nullable=True)  # NULL=all, 'applicant'=applicant only, 'camper'=camper only
+    score_calculation_type = Column(String(50), nullable=True)  # e.g., 'fasd_best' for FASD BeST score calculation
     created_at = Column(DateTime(timezone=True), server_default=text("NOW()"))
     updated_at = Column(DateTime(timezone=True), server_default=text("NOW()"), onupdate=text("NOW()"))
 
@@ -107,11 +108,16 @@ class Application(Base):
     # Payment tracking
     paid_invoice = Column(Boolean, nullable=True)  # NULL=no invoice, False=unpaid, True=paid
     stripe_invoice_id = Column(String(255), nullable=True)  # Stripe invoice ID
+    stripe_customer_id = Column(String(255), nullable=True)  # Stripe customer ID (cached from user)
 
     # Camper metadata for admin table
     camper_age = Column(Integer, nullable=True)
     camper_gender = Column(String(50), nullable=True)
     tuition_status = Column(String(50), nullable=True)
+
+    # FASD BeST Score - auto-calculated from FASD Screener responses
+    # NULL if not all questions answered, otherwise sum of scores
+    fasd_best_score = Column(Integer, nullable=True)
 
     # Approval tracking
     ops_approved = Column(Boolean, default=False, server_default="false")
@@ -134,6 +140,8 @@ class Application(Base):
     deferred_at = Column(DateTime(timezone=True))  # When deferred
     withdrawn_at = Column(DateTime(timezone=True))  # When withdrawn
     rejected_at = Column(DateTime(timezone=True))  # When rejected
+    deactivated_at = Column(DateTime(timezone=True))  # When deactivated (generic inactive)
+    reactivated_at = Column(DateTime(timezone=True))  # When reactivated by user
     paid_at = Column(DateTime(timezone=True))  # When payment received
     accepted_at = Column(DateTime(timezone=True))  # Legacy - kept for migration
     declined_at = Column(DateTime(timezone=True))  # Legacy - kept for migration
@@ -302,3 +310,47 @@ class Allergy(Base):
 
     def __repr__(self):
         return f"<Allergy {self.allergen}>"
+
+
+class Invoice(Base):
+    """Invoice for payment tracking"""
+
+    __tablename__ = "invoices"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("uuid_generate_v4()"))
+    application_id = Column(UUID(as_uuid=True), ForeignKey("applications.id", ondelete="CASCADE"))
+    stripe_invoice_id = Column(String(255), unique=True, nullable=True)
+    amount = Column(DECIMAL(10, 2), nullable=False)
+    discount_amount = Column(DECIMAL(10, 2), default=0, server_default="0")
+    scholarship_applied = Column(Boolean, default=False, server_default="false")
+    scholarship_note = Column(Text, nullable=True)
+    status = Column(String(50), default="draft", server_default="draft")  # draft, open, paid, void, uncollectible
+    paid_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Payment plan fields
+    payment_number = Column(Integer, default=1, server_default="1")
+    total_payments = Column(Integer, default=1, server_default="1")
+    due_date = Column(DateTime(timezone=True), nullable=True)
+
+    # Stripe URLs
+    stripe_invoice_url = Column(Text, nullable=True)
+    stripe_hosted_url = Column(Text, nullable=True)
+
+    # Void tracking
+    voided_at = Column(DateTime(timezone=True), nullable=True)
+    voided_reason = Column(Text, nullable=True)
+
+    # Metadata
+    description = Column(Text, nullable=True)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=text("NOW()"))
+    updated_at = Column(DateTime(timezone=True), server_default=text("NOW()"), onupdate=text("NOW()"))
+
+    # Relationships
+    application = relationship("Application", foreign_keys=[application_id])
+    creator = relationship("User", foreign_keys=[created_by])
+
+    def __repr__(self):
+        return f"<Invoice {self.id} - ${self.amount} - {self.status}>"

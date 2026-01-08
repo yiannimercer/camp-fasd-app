@@ -81,7 +81,7 @@ export default function LandingPage() {
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-full shadow-sm border border-white/50 mb-8 animate-fade-in">
             <Tent className="w-4 h-4 text-camp-green" />
-            <span className="text-sm font-medium text-gray-700">Summer 2025 Applications Opening Soon</span>
+            <span className="text-sm font-medium text-gray-700">Summer 2026 Applications Opening Soon</span>
             <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
           </div>
 
@@ -196,6 +196,8 @@ export default function LandingPage() {
             <div className="flex items-center gap-6 text-sm text-white/60">
               <Link href="/login" className="hover:text-white transition-colors">Sign In</Link>
               <Link href="/register" className="hover:text-white transition-colors">Apply</Link>
+              <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
+              <Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
             </div>
             <p className="text-sm text-white/40">
               © {new Date().getFullYear()} CAMP FASD. All rights reserved.

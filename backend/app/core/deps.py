@@ -1,17 +1,66 @@
 """
 Dependency injection for FastAPI routes
+Supports both Supabase Auth JWTs and legacy custom JWTs for backward compatibility
 """
 
 from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
+from jose import jwt, JWTError
 from app.core.database import get_db
-from app.core.security import decode_access_token
+from app.core.config import settings
 from app.models.user import User
 
 # HTTP Bearer token security scheme
 security = HTTPBearer()
+
+
+def decode_supabase_token(token: str) -> Optional[str]:
+    """
+    Decode a Supabase JWT and return the user ID (sub claim).
+    Supabase JWTs are signed with the project's JWT secret.
+
+    Args:
+        token: JWT token string from Supabase Auth
+
+    Returns:
+        Supabase auth user ID from token, or None if invalid
+    """
+    try:
+        # Supabase uses HS256 by default
+        payload = jwt.decode(
+            token,
+            settings.SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
+            audience="authenticated",  # Supabase tokens have this audience
+        )
+        return payload.get("sub")
+    except JWTError as e:
+        print(f"Supabase JWT decode error: {e}")
+        return None
+
+
+def decode_legacy_token(token: str) -> Optional[str]:
+    """
+    Decode our legacy custom JWT and return the user ID.
+    Kept for backward compatibility during migration.
+
+    Args:
+        token: Legacy JWT token string
+
+    Returns:
+        User ID from token, or None if invalid
+    """
+    try:
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET,
+            algorithms=[settings.JWT_ALGORITHM]
+        )
+        return payload.get("sub")
+    except JWTError:
+        return None
 
 
 async def get_current_user(
@@ -19,7 +68,8 @@ async def get_current_user(
     db: Session = Depends(get_db)
 ) -> User:
     """
-    Get current authenticated user from JWT token
+    Get current authenticated user from JWT token.
+    Supports both Supabase Auth tokens and legacy custom tokens.
 
     Args:
         credentials: Bearer token from Authorization header
@@ -32,21 +82,30 @@ async def get_current_user(
         HTTPException: If token is invalid or user not found
     """
     token = credentials.credentials
-    user_id = decode_access_token(token)
+    user = None
 
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    # Try Supabase token first (preferred method)
+    supabase_user_id = decode_supabase_token(token)
+    if supabase_user_id:
+        # Look up user by Supabase auth ID
+        user = db.query(User).filter(User.supabase_auth_id == supabase_user_id).first()
 
-    user = db.query(User).filter(User.id == user_id).first()
+        # If not found by supabase_auth_id, the user might have just signed up
+        # and the trigger hasn't run yet, or there's a sync issue
+        if not user:
+            print(f"User with supabase_auth_id {supabase_user_id} not found in database")
 
+    # Fall back to legacy token if Supabase token didn't work
+    if user is None:
+        legacy_user_id = decode_legacy_token(token)
+        if legacy_user_id:
+            user = db.query(User).filter(User.id == legacy_user_id).first()
+
+    # If still no user found, token is invalid
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+            detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

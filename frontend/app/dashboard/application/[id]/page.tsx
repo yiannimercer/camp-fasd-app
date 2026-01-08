@@ -8,6 +8,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/contexts/AuthContext'
+import { useToast } from '@/components/shared/ToastNotification'
 import {
   getApplicationSections,
   getApplicationProgress,
@@ -15,7 +16,9 @@ import {
   updateApplication,
   ApplicationSection,
   ApplicationProgress,
-  ApplicationResponse
+  ApplicationResponse,
+  SectionHeader,
+  ApplicationQuestion
 } from '@/lib/api-applications'
 import { uploadFile, deleteFile, getFile, getFilesBatch, getTemplateFile, FileInfo } from '@/lib/api-files'
 // Medication/allergy APIs disabled - data now saves as JSON in main responses
@@ -34,6 +37,7 @@ export default function ApplicationWizardPage() {
   const params = useParams()
   const router = useRouter()
   const { token, user } = useAuth()
+  const toast = useToast()
   const applicationId = params.id as string
 
   const [sections, setSections] = useState<ApplicationSection[]>([])
@@ -66,6 +70,11 @@ export default function ApplicationWizardPage() {
   // Track unsaved changes for immediate save on page unload
   const hasUnsavedChanges = useRef(false)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // CRITICAL: Track latest responses in a ref to avoid React async state timing issues
+  // When user clicks Save & Exit immediately after a change, React's setState may not have
+  // processed yet, so we need a synchronously-updated ref to ensure we save the latest data
+  const responsesRef = useRef<Record<string, string>>({})
 
   // Save current section to localStorage whenever it changes
   useEffect(() => {
@@ -181,6 +190,7 @@ export default function ApplicationWizardPage() {
         }
 
         setResponses(responsesMap)
+        responsesRef.current = responsesMap  // Keep ref in sync
         setUploadedFiles(filesMap)
 
         // Extract camper name and profile picture for ProfileHeader
@@ -351,7 +361,11 @@ export default function ApplicationWizardPage() {
 
     setSaving(true)
     try {
-      const responseArray: ApplicationResponse[] = Object.entries(responses).map(([questionId, value]) => {
+      // CRITICAL: Use responsesRef.current instead of responses state
+      // React's setState is async, so if user clicks Save & Exit immediately after a change,
+      // the state might not be updated yet. The ref is updated synchronously in handleResponseChange.
+      const currentResponses = responsesRef.current
+      const responseArray: ApplicationResponse[] = Object.entries(currentResponses).map(([questionId, value]) => {
         // Check if this is a file upload response (value is a UUID/file_id)
         const isFileUpload = uploadedFiles[questionId] !== undefined
 
@@ -481,7 +495,7 @@ export default function ApplicationWizardPage() {
       setProgress(progressData)
     } catch (error) {
       console.error('File upload failed:', error)
-      alert('Failed to upload file. Please try again.')
+      toast.error('Failed to upload file. Please try again.')
     } finally {
       setUploadingFiles(prev => ({ ...prev, [questionId]: false }))
     }
@@ -521,7 +535,7 @@ export default function ApplicationWizardPage() {
       setProgress(progressData)
     } catch (error) {
       console.error('File deletion failed:', error)
-      alert('Failed to delete file. Please try again.')
+      toast.error('Failed to delete file. Please try again.')
     }
   }
 
@@ -625,6 +639,10 @@ export default function ApplicationWizardPage() {
       // Mark as having unsaved changes immediately
       hasUnsavedChanges.current = true
 
+      // CRITICAL: Update ref synchronously so Save & Exit always has latest data
+      // React's setState is async, but we need the ref updated immediately
+      responsesRef.current = newResponses
+
       return newResponses
     })
 
@@ -708,6 +726,22 @@ export default function ApplicationWizardPage() {
 
     // Show if the trigger question has the expected answer
     return triggerResponse === question.show_if_answer;
+  }
+
+  // Helper type for unified section items (headers + questions)
+  type SectionItem =
+    | { type: 'header'; data: SectionHeader; order_index: number }
+    | { type: 'question'; data: ApplicationQuestion; order_index: number }
+
+  // Get unified items (headers + questions) sorted by order_index
+  // This allows headers to be rendered as dividers between question groups
+  const getSectionItems = (section: ApplicationSection): SectionItem[] => {
+    const activeHeaders = (section.headers || []).filter(h => h.is_active)
+    const items: SectionItem[] = [
+      ...activeHeaders.map(h => ({ type: 'header' as const, data: h, order_index: h.order_index })),
+      ...section.questions.map(q => ({ type: 'question' as const, data: q, order_index: q.order_index }))
+    ]
+    return items.sort((a, b) => a.order_index - b.order_index)
   }
 
 
@@ -1024,9 +1058,40 @@ export default function ApplicationWizardPage() {
                   dateOfBirth={camperDateOfBirth}
                 />
 
-                {currentSection?.questions.filter(shouldShowQuestion).map((question, qIndex) => (
+                {/* Render unified items (headers + questions) sorted by order_index */}
+                {currentSection && (() => {
+                  const items = getSectionItems(currentSection)
+                  let questionNumber = 0 // Track question numbering separately
+
+                  return items.map((item) => {
+                    // Render section headers as sub-section dividers
+                    if (item.type === 'header') {
+                      const header = item.data as SectionHeader
+                      return (
+                        <div key={`header-${header.id}`} className="pt-6 pb-4 first:pt-0">
+                          <div className="pb-3 border-b-2 border-camp-green/30">
+                            <h3 className="text-xl sm:text-2xl font-bold text-camp-charcoal">
+                              {header.header_text}
+                            </h3>
+                          </div>
+                        </div>
+                      )
+                    }
+
+                    // Render questions
+                    const question = item.data as ApplicationQuestion
+
+                    // Check conditional visibility
+                    if (!shouldShowQuestion(question)) {
+                      return null
+                    }
+
+                    questionNumber++ // Increment for visible questions only
+                    const qIndex = questionNumber - 1 // 0-based index for display
+
+                    return (
                   <div key={question.id} className="pb-6 sm:pb-8 border-b border-gray-200 last:border-0">
-                    {/* Section Header - Appears before question if header_text is set */}
+                    {/* Legacy: Section Header from question field (deprecated) */}
                     {question.header_text && (
                       <div className="mb-6 pb-3 border-b-2 border-camp-green/30">
                         <h3 className="text-xl sm:text-2xl font-bold text-camp-charcoal">
@@ -1036,7 +1101,7 @@ export default function ApplicationWizardPage() {
                     )}
 
                     <label className="block text-sm sm:text-base font-medium text-camp-charcoal mb-3">
-                      {qIndex + 1}. {question.question_text}
+                      {questionNumber}. {question.question_text}
                       {question.is_required && (
                         <span className="text-camp-orange ml-1">*</span>
                       )}
@@ -1186,10 +1251,11 @@ export default function ApplicationWizardPage() {
                       </>
                     )}
 
-                    {question.question_type === 'checkbox' && question.options && (
+                    {/* Checkbox with options - Multi-select checkboxes */}
+                    {question.question_type === 'checkbox' && question.options && Array.isArray(question.options) && question.options.length > 0 && (
                       <>
                         <div className="space-y-2">
-                          {Array.isArray(question.options) && question.options.map((option: string, i: number) => {
+                          {question.options.map((option: string, i: number) => {
                             const selectedOptions = responses[question.id] ? responses[question.id].split(',') : [];
                             const isChecked = selectedOptions.includes(option);
 
@@ -1239,6 +1305,22 @@ export default function ApplicationWizardPage() {
                       </>
                     )}
 
+                    {/* Checkbox without options - Single agreement checkbox (authorization style) */}
+                    {question.question_type === 'checkbox' && (!question.options || !Array.isArray(question.options) || question.options.length === 0) && (
+                      <label className="flex items-center space-x-3 cursor-pointer p-4 bg-camp-green/5 border-2 border-camp-green/30 rounded-lg hover:border-camp-green hover:bg-camp-green/10 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={responses[question.id] === 'true'}
+                          onChange={(e) => handleResponseChange(question.id, e.target.checked ? 'true' : '')}
+                          className="w-6 h-6 rounded border-gray-300 text-camp-green focus:ring-camp-green flex-shrink-0"
+                          required={question.is_required}
+                        />
+                        <span className="text-sm sm:text-base text-camp-green font-medium">
+                          {responses[question.id] === 'true' ? '✓ Agreed' : 'Check to agree'}
+                        </span>
+                      </label>
+                    )}
+
                     {question.question_type === 'signature' && (
                       <label className="flex items-start space-x-3 cursor-pointer bg-camp-green/5 border border-camp-green/40 rounded-lg p-4 sm:p-5">
                         <input
@@ -1280,7 +1362,7 @@ export default function ApplicationWizardPage() {
                                     window.open(templateFile.url, '_blank')
                                   } catch (error) {
                                     console.error('Failed to download template:', error)
-                                    alert('Failed to download template file')
+                                    toast.error('Failed to download template file')
                                   }
                                 }}
                                 className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors"
@@ -1523,7 +1605,9 @@ export default function ApplicationWizardPage() {
                       </div>
                     )}
                   </div>
-                ))}
+                    )
+                  })
+                })()}
               </CardContent>
             </Card>
 

@@ -3,19 +3,23 @@ Authentication API endpoints
 """
 
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import create_access_token, verify_password, get_password_hash
 from app.core.deps import get_current_user
+from app.core.audit import (
+    log_security_event, log_user_event,
+    ACTION_LOGIN_SUCCESS, ACTION_LOGIN_FAILED, ACTION_USER_CREATED, ACTION_LOGOUT
+)
 from app.models.user import User
-from app.schemas.user import UserCreate, UserLogin, Token, UserResponse
+from app.schemas.user import UserCreate, UserLogin, Token, UserResponse, ProfileUpdate
 
 router = APIRouter()
 
 
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate, db: Session = Depends(get_db)):
+async def register(user_data: UserCreate, request: Request, db: Session = Depends(get_db)):
     """
     Register a new user
 
@@ -49,6 +53,16 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_user)
 
+    # Log user registration
+    log_user_event(
+        db=db,
+        action=ACTION_USER_CREATED,
+        user_id=db_user.id,
+        actor_id=db_user.id,  # User created themselves
+        details={"email": db_user.email, "registration_method": "email"},
+        request=request
+    )
+
     # Create access token
     access_token = create_access_token(subject=str(db_user.id))
 
@@ -60,7 +74,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-async def login(credentials: UserLogin, db: Session = Depends(get_db)):
+async def login(credentials: UserLogin, request: Request, db: Session = Depends(get_db)):
     """
     Login with email and password
 
@@ -73,6 +87,13 @@ async def login(credentials: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == credentials.email).first()
 
     if not user or not user.password_hash:
+        # Log failed login attempt (user not found)
+        log_security_event(
+            db=db,
+            action=ACTION_LOGIN_FAILED,
+            details={"email": credentials.email, "reason": "user_not_found"},
+            request=request
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password"
@@ -80,6 +101,15 @@ async def login(credentials: UserLogin, db: Session = Depends(get_db)):
 
     # Verify password
     if not verify_password(credentials.password, user.password_hash):
+        # Log failed login attempt (wrong password)
+        log_security_event(
+            db=db,
+            action=ACTION_LOGIN_FAILED,
+            actor_id=user.id,
+            entity_id=user.id,
+            details={"email": credentials.email, "reason": "invalid_password"},
+            request=request
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password"
@@ -88,6 +118,16 @@ async def login(credentials: UserLogin, db: Session = Depends(get_db)):
     # Update last login
     user.last_login = datetime.utcnow()
     db.commit()
+
+    # Log successful login
+    log_security_event(
+        db=db,
+        action=ACTION_LOGIN_SUCCESS,
+        actor_id=user.id,
+        entity_id=user.id,
+        details={"email": user.email},
+        request=request
+    )
 
     # Create access token
     access_token = create_access_token(subject=str(user.id))
@@ -118,3 +158,35 @@ async def logout(current_user: User = Depends(get_current_user)):
     by removing the token from storage.
     """
     return {"message": "Successfully logged out"}
+
+
+@router.patch("/profile", response_model=UserResponse)
+async def update_profile(
+    profile_data: ProfileUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update current user's profile
+
+    - **first_name**: User's first name
+    - **last_name**: User's last name
+    - **phone**: Phone number
+    - **receive_emails**: Email notification preference
+    """
+    # Update fields if provided
+    if profile_data.first_name is not None:
+        current_user.first_name = profile_data.first_name
+    if profile_data.last_name is not None:
+        current_user.last_name = profile_data.last_name
+    if profile_data.phone is not None:
+        current_user.phone = profile_data.phone
+    if profile_data.receive_emails is not None:
+        current_user.receive_emails = profile_data.receive_emails
+
+    current_user.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(current_user)
+
+    return UserResponse.model_validate(current_user)
