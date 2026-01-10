@@ -123,36 +123,41 @@ def delete_auth_user(supabase_auth_id: str) -> Dict[str, Any]:
         }
 
 
-def send_password_reset(email: str) -> Dict[str, Any]:
+def send_password_reset(email: str, redirect_url: Optional[str] = None) -> Dict[str, Any]:
     """
-    Generate and send a password reset email to the user.
-    Uses Supabase's built-in password reset flow.
+    Send a password reset email to the user.
+    Uses Supabase's built-in password reset email flow.
+
+    Note: admin.generate_link() only CREATES a link but doesn't send email.
+    We use reset_password_for_email() which actually triggers the email.
 
     Args:
         email: User's email address
+        redirect_url: Optional custom redirect URL (defaults to FRONTEND_URL if not provided)
 
     Returns:
         dict with success status and any error message
     """
     try:
         client = get_supabase_admin()
-        # Generate a password reset link - this sends an email automatically
-        response = client.auth.admin.generate_link({
-            "type": "recovery",
-            "email": email,
-            "options": {
-                "redirect_to": f"{settings.FRONTEND_URL}/auth/reset-password"
+        # Use provided redirect_url or fall back to settings
+        final_redirect_url = redirect_url or f"{settings.FRONTEND_URL}/auth/reset-password"
+
+        # Use reset_password_for_email which actually SENDS the email
+        # (unlike generate_link which only creates a link)
+        client.auth.reset_password_for_email(
+            email,
+            options={
+                "redirect_to": final_redirect_url
             }
-        })
+        )
         return {
             'success': True,
-            'link': response.properties.action_link if response and response.properties else None,
             'error': None
         }
     except Exception as e:
         return {
             'success': False,
-            'link': None,
             'error': str(e)
         }
 

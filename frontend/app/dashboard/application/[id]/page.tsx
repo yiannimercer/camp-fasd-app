@@ -178,10 +178,10 @@ export default function ApplicationWizardPage() {
             }
           }
 
-          // Load text responses
+          // Load text responses (use String() to ensure consistent key format)
           applicationData.responses.forEach(r => {
             if (r.response_value && !r.file_id) {
-              responsesMap[r.question_id] = r.response_value
+              responsesMap[String(r.question_id)] = r.response_value
             }
           })
 
@@ -196,7 +196,7 @@ export default function ApplicationWizardPage() {
         // Extract camper name and profile picture for ProfileHeader
         sectionsData.forEach(section => {
           section.questions.forEach(question => {
-            const questionId = question.id;
+            const questionId = String(question.id);  // Ensure string for consistent key lookup
             const response = responsesMap[questionId];
 
             // Look for first name (case-insensitive)
@@ -541,7 +541,8 @@ export default function ApplicationWizardPage() {
 
   // Helper function to get the actual value from a response (handles JSON structure)
   const getResponseValue = (questionId: string): string => {
-    const response = responses[questionId]
+    // Always use String() to ensure consistent key lookup (UUIDs may be objects or strings)
+    const response = responses[String(questionId)]
     if (!response) return ''
 
     try {
@@ -554,7 +555,8 @@ export default function ApplicationWizardPage() {
 
   // Helper function to get the detail value from a response
   const getResponseDetail = (questionId: string): string => {
-    const response = responses[questionId]
+    // Always use String() to ensure consistent key lookup (UUIDs may be objects or strings)
+    const response = responses[String(questionId)]
     if (!response) return ''
 
     try {

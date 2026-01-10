@@ -130,6 +130,9 @@ class Application(Base):
     behavioral_approved_at = Column(DateTime(timezone=True))
     medical_approved_at = Column(DateTime(timezone=True))
 
+    # Legacy WordPress migration fields
+    legacy_wp_camper_id = Column(Integer, nullable=True, index=True)  # WordPress camper post ID from migration
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=text("NOW()"))
     updated_at = Column(DateTime(timezone=True), server_default=text("NOW()"), onupdate=text("NOW()"))

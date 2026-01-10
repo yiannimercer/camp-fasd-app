@@ -45,6 +45,7 @@ export default function GoogleLoginButton() {
       )}
 
       <button
+        type="button"
         onClick={handleGoogleLogin}
         disabled={isLoading}
         className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-gray-300 rounded-lg shadow-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-camp-green transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

@@ -33,6 +33,61 @@ export interface AuthResponse {
   user: User
 }
 
+export interface CheckLegacyUserResponse {
+  exists: boolean
+  is_legacy_user: boolean
+  needs_password_setup: boolean
+  password_reset_sent: boolean
+  message: string
+}
+
+/**
+ * Check if an email belongs to a legacy user who needs password setup.
+ * This is called before login to provide a seamless experience for
+ * users migrated from the legacy WordPress system.
+ */
+export async function checkLegacyUser(email: string): Promise<CheckLegacyUserResponse> {
+  const response = await fetch(`${API_URL}/api/auth/check-legacy-user`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email }),
+  })
+
+  if (!response.ok) {
+    // Don't throw on error - just return a default response
+    return {
+      exists: false,
+      is_legacy_user: false,
+      needs_password_setup: false,
+      password_reset_sent: false,
+      message: '',
+    }
+  }
+
+  return response.json()
+}
+
+/**
+ * Mark a legacy user's password as set after they complete the reset flow.
+ */
+export async function markPasswordSet(email: string): Promise<{ success: boolean }> {
+  const response = await fetch(`${API_URL}/api/auth/mark-password-set`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email }),
+  })
+
+  if (!response.ok) {
+    return { success: false }
+  }
+
+  return response.json()
+}
+
 /**
  * Login with email and password
  */

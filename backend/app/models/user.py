@@ -2,7 +2,7 @@
 User database model
 """
 
-from sqlalchemy import Column, String, Boolean, DateTime, text
+from sqlalchemy import Column, String, Boolean, DateTime, Integer, text
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
 
@@ -43,6 +43,10 @@ class User(Base):
 
     # Stripe integration
     stripe_customer_id = Column(String(255), unique=True, nullable=True, index=True)
+
+    # Legacy WordPress migration fields
+    legacy_wp_user_id = Column(Integer, nullable=True, index=True)  # WordPress user ID from migration
+    needs_password_setup = Column(Boolean, default=False, server_default="false")  # True for migrated users who need to set password
 
     def __repr__(self):
         return f"<User {self.email} ({self.role})>"

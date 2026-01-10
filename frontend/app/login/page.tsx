@@ -9,11 +9,12 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/contexts/AuthContext'
+import { checkLegacyUser } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import GoogleLoginButton from '@/components/GoogleLoginButton'
-import { TreePine, Sun, Sparkles, Mountain } from 'lucide-react'
+import { TreePine, Sun, Sparkles, Mountain, Mail, CheckCircle, PartyPopper, ArrowRight, Inbox, KeyRound, LogIn } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -22,6 +23,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [legacyUserMessage, setLegacyUserMessage] = useState('')
+  const [showPasswordResetSent, setShowPasswordResetSent] = useState(false)
 
   // Redirect if already authenticated
   if (isAuthenticated) {
@@ -32,9 +35,23 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setLegacyUserMessage('')
+    setShowPasswordResetSent(false)
     setIsLoading(true)
 
     try {
+      // First, check if this is a legacy user who needs to set their password
+      const legacyCheck = await checkLegacyUser(email)
+
+      if (legacyCheck.needs_password_setup) {
+        // Legacy user detected - show welcome message instead of trying to login
+        setShowPasswordResetSent(true)
+        setLegacyUserMessage(legacyCheck.message || 'Welcome back! Please check your email to set your new password.')
+        setIsLoading(false)
+        return
+      }
+
+      // Not a legacy user (or already set password) - proceed with normal login
       await login({ email, password })
       router.push('/dashboard')
     } catch (err) {
@@ -105,6 +122,100 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
 
+          {/* Legacy User Welcome Back - Warm onboarding flow */}
+          {showPasswordResetSent ? (
+            <CardContent className="space-y-0 p-0 overflow-hidden">
+              {/* Golden welcome header */}
+              <div className="relative bg-gradient-to-br from-amber-400 via-orange-400 to-camp-orange px-6 py-8 text-white overflow-hidden">
+                {/* Decorative elements */}
+                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+                <Sun className="absolute top-4 right-4 w-8 h-8 text-amber-200/40 animate-pulse" />
+
+                <div className="relative z-10 flex items-center gap-4">
+                  <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center shadow-lg">
+                    <PartyPopper className="w-7 h-7 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold tracking-tight">Welcome Back!</h3>
+                    <p className="text-amber-100 text-sm mt-0.5">Great to see you again, Camp family</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Message and steps */}
+              <div className="px-6 py-6 space-y-5">
+                {/* What's happening notice */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                  <p className="text-amber-900 text-sm leading-relaxed">
+                    <span className="font-semibold">We&apos;ve upgraded!</span> Our new system requires a quick password setup.
+                    We&apos;ve sent instructions to your email.
+                  </p>
+                </div>
+
+                {/* 3-Step visual journey */}
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Your next steps</p>
+
+                  {/* Step 1 */}
+                  <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-emerald-50 to-transparent rounded-lg border border-emerald-100">
+                    <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm">
+                      <Inbox className="w-4 h-4 text-white" />
+                    </div>
+                    <div className="pt-0.5">
+                      <p className="font-semibold text-gray-800 text-sm">Check your inbox</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Look for an email from CAMP FASD</p>
+                    </div>
+                    <CheckCircle className="w-5 h-5 text-emerald-500 ml-auto flex-shrink-0" />
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                    <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-white text-sm font-bold">2</span>
+                    </div>
+                    <div className="pt-0.5">
+                      <p className="font-semibold text-gray-800 text-sm">Click the secure link</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Opens our password setup page</p>
+                    </div>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                    <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-white text-sm font-bold">3</span>
+                    </div>
+                    <div className="pt-0.5">
+                      <p className="font-semibold text-gray-800 text-sm">Create your new password</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Then you&apos;re all set!</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Email sent to */}
+                <div className="flex items-center gap-2 py-2 px-3 bg-gray-100 rounded-lg">
+                  <Mail className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm text-gray-600">Sent to:</span>
+                  <span className="text-sm font-medium text-gray-800 truncate">{email}</span>
+                </div>
+
+                {/* Help text */}
+                <p className="text-xs text-center text-gray-500">
+                  Didn&apos;t receive it? Check your spam folder, or{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowPasswordResetSent(false)
+                      setLegacyUserMessage('')
+                    }}
+                    className="text-camp-green hover:text-camp-orange font-semibold transition-colors"
+                  >
+                    try again
+                  </button>
+                </p>
+              </div>
+            </CardContent>
+          ) : (
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
               {error && (
@@ -208,6 +319,7 @@ export default function LoginPage() {
               </p>
             </CardFooter>
           </form>
+          )}
         </Card>
 
         {/* Footer */}

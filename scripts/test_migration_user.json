@@ -1,0 +1,15 @@
+[
+    {
+        "id": 99999,
+        "username": "testmigration",
+        "email": "yjmercer@gmail.com",
+        "display_name": "Test Migration User",
+        "registered": "2024-01-01 00:00:00",
+        "role": ["subscriber"],
+        "meta": {
+            "first_name": "Test",
+            "last_name": "Migration",
+            "user_phone": "555-123-4567"
+        }
+    }
+]

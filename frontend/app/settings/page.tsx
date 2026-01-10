@@ -152,6 +152,12 @@ export default function SettingsPage() {
     setPasswordError('')
     setPasswordSuccess(false)
 
+    // Validate current password is provided
+    if (!currentPassword) {
+      setPasswordError('Please enter your current password')
+      return
+    }
+
     if (newPassword !== confirmPassword) {
       setPasswordError('New passwords do not match')
       return
@@ -165,6 +171,17 @@ export default function SettingsPage() {
     setPasswordLoading(true)
 
     try {
+      // First, verify the current password by re-authenticating
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user?.email || '',
+        password: currentPassword,
+      })
+
+      if (signInError) {
+        throw new Error('Current password is incorrect')
+      }
+
+      // Current password verified - now update to new password
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
       })
@@ -545,6 +562,18 @@ export default function SettingsPage() {
                       Password changed successfully!
                     </div>
                   )}
+
+                  <Input
+                    label="Current Password"
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="Enter your current password"
+                    autoComplete="current-password"
+                    required
+                  />
+
+                  <div className="border-t border-gray-200 my-2" />
 
                   <Input
                     label="New Password"
