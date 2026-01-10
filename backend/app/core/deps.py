@@ -15,11 +15,36 @@ from app.models.user import User
 # HTTP Bearer token security scheme
 security = HTTPBearer()
 
+# Cache for PyJWKClient to avoid recreating on every request
+_jwks_client = None
+
+
+def _get_jwks_client():
+    """
+    Get or create a cached PyJWKClient for Supabase JWKS verification.
+    Uses PyJWT's built-in JWKS client which properly handles ECC keys.
+    """
+    global _jwks_client
+    if _jwks_client is None:
+        try:
+            import jwt as pyjwt
+            from jwt import PyJWKClient
+
+            # Build JWKS URL from Supabase project URL
+            project_ref = settings.SUPABASE_URL.replace("https://", "").split(".")[0]
+            jwks_url = f"https://{project_ref}.supabase.co/auth/v1/.well-known/jwks.json"
+
+            _jwks_client = PyJWKClient(jwks_url, cache_keys=True, lifespan=3600)
+        except Exception as e:
+            print(f"Failed to create JWKS client: {e}")
+            return None
+    return _jwks_client
+
 
 def decode_supabase_token(token: str) -> Optional[str]:
     """
     Decode a Supabase JWT and return the user ID (sub claim).
-    Supabase JWTs are signed with the project's JWT secret.
+    Supports both legacy HS256 tokens and new ES256 (ECC) tokens.
 
     Args:
         token: JWT token string from Supabase Auth
@@ -27,17 +52,41 @@ def decode_supabase_token(token: str) -> Optional[str]:
     Returns:
         Supabase auth user ID from token, or None if invalid
     """
+    # First, try HS256 with legacy JWT secret (works for DEV and older PROD tokens)
     try:
-        # Supabase uses HS256 by default
         payload = jwt.decode(
             token,
             settings.SUPABASE_JWT_SECRET,
             algorithms=["HS256"],
-            audience="authenticated",  # Supabase tokens have this audience
+            audience="authenticated",
         )
         return payload.get("sub")
     except JWTError as e:
-        print(f"Supabase JWT decode error: {e}")
+        print(f"HS256 decode failed: {e}, trying JWKS/ECC...")
+
+    # If HS256 fails, try JWKS-based verification using PyJWT (for ECC keys)
+    try:
+        import jwt as pyjwt
+
+        jwks_client = _get_jwks_client()
+        if jwks_client is None:
+            print("JWKS client not available")
+            return None
+
+        # Get the signing key from JWKS
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
+
+        # Decode and verify the token
+        payload = pyjwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["ES256", "RS256"],
+            audience="authenticated",
+        )
+        return payload.get("sub")
+
+    except Exception as e:
+        print(f"JWKS/ECC decode also failed: {e}")
         return None
 
 
