@@ -15,31 +15,6 @@ from app.models.user import User
 # HTTP Bearer token security scheme
 security = HTTPBearer()
 
-# Cache for PyJWKClient to avoid recreating on every request
-_jwks_client = None
-
-
-def _get_jwks_client():
-    """
-    Get or create a cached PyJWKClient for Supabase JWKS verification.
-    Uses PyJWT's built-in JWKS client which properly handles ECC keys.
-    """
-    global _jwks_client
-    if _jwks_client is None:
-        try:
-            import jwt as pyjwt
-            from jwt import PyJWKClient
-
-            # Build JWKS URL from Supabase project URL
-            project_ref = settings.SUPABASE_URL.replace("https://", "").split(".")[0]
-            jwks_url = f"https://{project_ref}.supabase.co/auth/v1/.well-known/jwks.json"
-
-            _jwks_client = PyJWKClient(jwks_url, cache_keys=True, lifespan=3600)
-        except Exception as e:
-            print(f"Failed to create JWKS client: {e}")
-            return None
-    return _jwks_client
-
 
 def decode_supabase_token(token: str) -> Optional[str]:
     """
@@ -67,13 +42,16 @@ def decode_supabase_token(token: str) -> Optional[str]:
     # If HS256 fails, try JWKS-based verification using PyJWT (for ECC keys)
     try:
         import jwt as pyjwt
+        from jwt import PyJWKClient
 
-        jwks_client = _get_jwks_client()
-        if jwks_client is None:
-            print("JWKS client not available")
-            return None
+        # Build JWKS URL from Supabase project URL
+        project_ref = settings.SUPABASE_URL.replace("https://", "").split(".")[0]
+        jwks_url = f"https://{project_ref}.supabase.co/auth/v1/.well-known/jwks.json"
 
-        # Get the signing key from JWKS
+        print(f"Attempting JWKS verification from: {jwks_url}")
+
+        # Create client and get signing key
+        jwks_client = PyJWKClient(jwks_url)
         signing_key = jwks_client.get_signing_key_from_jwt(token)
 
         # Decode and verify the token
@@ -83,10 +61,16 @@ def decode_supabase_token(token: str) -> Optional[str]:
             algorithms=["ES256", "RS256"],
             audience="authenticated",
         )
+        print(f"JWKS verification successful, sub: {payload.get('sub')}")
         return payload.get("sub")
 
+    except ImportError as e:
+        print(f"PyJWT import failed: {e}")
+        return None
     except Exception as e:
-        print(f"JWKS/ECC decode also failed: {e}")
+        print(f"JWKS/ECC decode failed: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
