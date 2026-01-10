@@ -11,7 +11,7 @@ from sqlalchemy import func, or_, and_, text
 from app.core.database import get_db
 from app.core.deps import get_current_super_admin_user
 from app.models.user import User
-from app.models.application import Application, ApplicationResponse, ApplicationQuestion, AdminNote, File, Invoice
+from app.models.application import Application, ApplicationResponse, ApplicationQuestion, AdminNote, File, Invoice, ApplicationApproval
 from app.models.super_admin import SystemConfiguration, AuditLog, EmailTemplate, EmailAutomation, Team
 from app.services import stripe_service, storage_service
 from app.schemas.super_admin import (
@@ -1593,16 +1593,10 @@ async def perform_annual_reset(
             # Mark as returning camper since they had a previous application
             app.is_returning_camper = True
 
-            # Clear approval flags
-            app.ops_approved = False
-            app.behavioral_approved = False
-            app.medical_approved = False
-            app.ops_approved_by = None
-            app.behavioral_approved_by = None
-            app.medical_approved_by = None
-            app.ops_approved_at = None
-            app.behavioral_approved_at = None
-            app.medical_approved_at = None
+            # Clear approval records from application_approvals table
+            db.query(ApplicationApproval).filter(
+                ApplicationApproval.application_id == app.id
+            ).delete()
 
             # Clear timestamps (except created_at)
             app.completed_at = None

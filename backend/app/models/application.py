@@ -119,16 +119,7 @@ class Application(Base):
     # NULL if not all questions answered, otherwise sum of scores
     fasd_best_score = Column(Integer, nullable=True)
 
-    # Approval tracking
-    ops_approved = Column(Boolean, default=False, server_default="false")
-    behavioral_approved = Column(Boolean, default=False, server_default="false")
-    medical_approved = Column(Boolean, default=False, server_default="false")
-    ops_approved_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    behavioral_approved_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    medical_approved_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    ops_approved_at = Column(DateTime(timezone=True))
-    behavioral_approved_at = Column(DateTime(timezone=True))
-    medical_approved_at = Column(DateTime(timezone=True))
+    # Note: Team approvals are tracked in application_approvals table, not here
 
     # Legacy WordPress migration fields
     legacy_wp_camper_id = Column(Integer, nullable=True, index=True)  # WordPress camper post ID from migration
@@ -235,6 +226,8 @@ class ApplicationApproval(Base):
     admin_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     approved = Column(Boolean, nullable=False)  # True = approve, False = decline
     note = Column(Text, nullable=True)  # Required note explaining the decision
+    admin_name = Column(String(255), nullable=True)  # Denormalized admin name for history
+    admin_team = Column(String(50), nullable=True)  # ops, behavioral, med, lit
     created_at = Column(DateTime(timezone=True), server_default=text("NOW()"))
 
     # Relationships

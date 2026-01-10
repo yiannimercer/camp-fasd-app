@@ -401,10 +401,15 @@ async def approve_application(
             ApplicationApproval.admin_id == current_user.id
         ).first()
 
+        # Build admin name for denormalized storage
+        admin_full_name = f"{current_user.first_name or ''} {current_user.last_name or ''}".strip() or current_user.email
+
         if existing:
             # Update existing record
             existing.approved = True
             existing.note = approval_request.note.strip()
+            existing.admin_name = admin_full_name
+            existing.admin_team = current_user.team
             existing.created_at = datetime.now(timezone.utc)  # Update timestamp
         else:
             # Create new approval record
@@ -412,7 +417,9 @@ async def approve_application(
                 application_id=application_id,
                 admin_id=current_user.id,
                 approved=True,
-                note=approval_request.note.strip()
+                note=approval_request.note.strip(),
+                admin_name=admin_full_name,
+                admin_team=current_user.team
             )
             db.add(approval)
 
@@ -530,10 +537,15 @@ async def decline_application(
             ApplicationApproval.admin_id == current_user.id
         ).first()
 
+        # Build admin name for denormalized storage
+        admin_full_name = f"{current_user.first_name or ''} {current_user.last_name or ''}".strip() or current_user.email
+
         if existing:
             # Update existing record to declined
             existing.approved = False
             existing.note = approval_request.note.strip()
+            existing.admin_name = admin_full_name
+            existing.admin_team = current_user.team
             existing.created_at = datetime.now(timezone.utc)
         else:
             # Create new decline record
@@ -541,7 +553,9 @@ async def decline_application(
                 application_id=application_id,
                 admin_id=current_user.id,
                 approved=False,
-                note=approval_request.note.strip()
+                note=approval_request.note.strip(),
+                admin_name=admin_full_name,
+                admin_team=current_user.team
             )
             db.add(decline)
 
