@@ -346,8 +346,8 @@ def get_branded_email_wrapper(db: Session, content: str, subject: str = "") -> s
     forest_green = "#316429"
     orange = "#e26e15"
 
-    # Logo URL - using the public logo URL or a placeholder
-    logo_url = f"https://{config['production_url']}/images/camp-logo.png"
+    # Logo URL - served from Next.js public folder (no /images/ subfolder)
+    logo_url = f"https://{config['production_url']}/camp-logo.png"
 
     branded_html = f'''<!DOCTYPE html>
 <html lang="en">
