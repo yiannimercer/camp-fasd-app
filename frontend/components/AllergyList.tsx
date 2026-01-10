@@ -28,6 +28,8 @@ interface AllergyListProps {
   onChange: (allergies: Allergy[]) => void;
   allergyFields?: FieldConfig[];
   isRequired?: boolean;
+  noAllergies?: boolean;
+  onNoAllergiesChange?: (value: boolean) => void;
 }
 
 const DEFAULT_ALLERGY_FIELDS: FieldConfig[] = [
@@ -49,7 +51,9 @@ export default function AllergyList({
   value,
   onChange,
   allergyFields = DEFAULT_ALLERGY_FIELDS,
-  isRequired = false
+  isRequired = false,
+  noAllergies = false,
+  onNoAllergiesChange
 }: AllergyListProps) {
   const [allergies, setAllergies] = useState<Allergy[]>(value || []);
 
@@ -140,26 +144,51 @@ export default function AllergyList({
 
   return (
     <div className="space-y-4">
+      {/* No Allergies Checkbox */}
+      {onNoAllergiesChange && (
+        <label className="flex items-center gap-3 p-4 bg-gray-50 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+          <input
+            type="checkbox"
+            checked={noAllergies}
+            onChange={(e) => {
+              onNoAllergiesChange(e.target.checked);
+              if (e.target.checked) {
+                // Clear allergies when "no allergies" is checked
+                setAllergies([]);
+                onChange([]);
+              }
+            }}
+            className="w-5 h-5 text-camp-green border-2 border-gray-300 rounded focus:ring-camp-green focus:ring-2"
+          />
+          <span className="text-sm font-medium text-gray-700">
+            This camper has no known allergies
+          </span>
+        </label>
+      )}
+
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-gray-600">
-          {allergies.length === 0 ? (
-            <span>No allergies added yet</span>
-          ) : (
-            <span>{allergies.length} allerg{allergies.length !== 1 ? 'ies' : 'y'} listed</span>
-          )}
+      {!noAllergies && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-gray-600">
+            {allergies.length === 0 ? (
+              <span>No allergies added yet</span>
+            ) : (
+              <span>{allergies.length} allerg{allergies.length !== 1 ? 'ies' : 'y'} listed</span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={addAllergy}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-camp-green rounded-lg hover:bg-camp-green/90 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Add Allergy
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={addAllergy}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-camp-green rounded-lg hover:bg-camp-green/90 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Add Allergy
-        </button>
-      </div>
+      )}
 
       {/* Allergies List */}
+      {!noAllergies && (
       <div className="space-y-4">
         {allergies.map((allergy, index) => (
           <div key={index} className="p-4 border-2 border-gray-300 rounded-lg bg-white">
@@ -205,19 +234,28 @@ export default function AllergyList({
           </div>
         ))}
       </div>
+      )}
 
-      {/* Empty State - Only show when there are no allergies */}
-      {allergies.length === 0 && (
+      {/* Empty State - Only show when there are no allergies and "no allergies" is not checked */}
+      {!noAllergies && allergies.length === 0 && (
         <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
           <p className="text-gray-600 mb-4">No allergies listed</p>
           <p className="text-sm text-gray-500 mb-4">Click the button above to add your first allergy</p>
         </div>
       )}
 
-      {/* Required Field Notice */}
-      {isRequired && allergies.length === 0 && (
+      {/* Confirmed No Allergies State */}
+      {noAllergies && (
+        <div className="text-center py-8 border-2 border-green-200 rounded-lg bg-green-50">
+          <p className="text-green-700 font-medium">✓ Confirmed: No known allergies</p>
+          <p className="text-sm text-green-600 mt-1">This camper has no known allergies</p>
+        </div>
+      )}
+
+      {/* Required Field Notice - not shown if "no allergies" is checked */}
+      {isRequired && !noAllergies && allergies.length === 0 && (
         <p className="text-sm text-red-600">
-          * At least one allergy is required
+          * At least one allergy is required, or check "no known allergies" above
         </p>
       )}
     </div>

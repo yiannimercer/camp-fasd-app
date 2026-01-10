@@ -1,7 +1,11 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
-import { GoogleOAuthProvider } from '@react-oauth/google'
 import { AuthProvider } from '@/lib/contexts/AuthContext'
+import { StatusColorsProvider } from '@/lib/contexts/StatusColorsContext'
+import { TeamColorsProvider } from '@/lib/contexts/TeamColorsContext'
+import { ToastProvider } from '@/components/shared/ToastNotification'
+import { RoleBanner } from '@/components/RoleBanner'
+import FeedbackWidget from '@/components/FeedbackWidget'
 import '../styles/globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -16,16 +20,21 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ''
-
   return (
     <html lang="en">
       <body className={inter.className}>
-        <GoogleOAuthProvider clientId={googleClientId}>
-          <AuthProvider>
-            {children}
-          </AuthProvider>
-        </GoogleOAuthProvider>
+        <AuthProvider>
+          <StatusColorsProvider>
+            <TeamColorsProvider>
+              <ToastProvider>
+                <RoleBanner />
+                <FeedbackWidget>
+                  {children}
+                </FeedbackWidget>
+              </ToastProvider>
+            </TeamColorsProvider>
+          </StatusColorsProvider>
+        </AuthProvider>
       </body>
     </html>
   )

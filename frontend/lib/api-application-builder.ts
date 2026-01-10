@@ -14,6 +14,7 @@ export interface Question {
   placeholder?: string;
   is_required: boolean;
   is_active: boolean;
+  persist_annually: boolean;  // Keep response during annual reset
   order_index: number;
   options?: string[];
   validation_rules?: {
@@ -25,7 +26,6 @@ export interface Question {
     file_types?: string[];
     max_file_size?: number;
   };
-  show_when_status?: string | null;
   template_file_id?: string | null;
   template_filename?: string | null;
   show_if_question_id?: string | null;
@@ -52,7 +52,7 @@ export interface Section {
   description?: string;
   order_index: number;
   is_active: boolean;
-  show_when_status?: string | null;
+  required_status?: string | null;  // NULL=all, 'applicant'=applicants only, 'camper'=campers only
   created_at: string;
   updated_at: string;
   questions: Question[];
@@ -64,7 +64,7 @@ export interface SectionCreate {
   description?: string;
   order_index: number;
   is_active?: boolean;
-  show_when_status?: string | null;
+  required_status?: string | null;  // NULL=all, 'applicant', 'camper'
 }
 
 export interface SectionUpdate {
@@ -72,7 +72,7 @@ export interface SectionUpdate {
   description?: string;
   order_index?: number;
   is_active?: boolean;
-  show_when_status?: string | null;
+  required_status?: string | null;  // NULL=all, 'applicant', 'camper'
 }
 
 export interface QuestionCreate {
@@ -84,10 +84,10 @@ export interface QuestionCreate {
   placeholder?: string;
   is_required?: boolean;
   is_active?: boolean;
+  persist_annually?: boolean;
   order_index: number;
   options?: string[];
   validation_rules?: any;
-  show_when_status?: string | null;
   template_file_id?: string | null;
   show_if_question_id?: string | null;
   show_if_answer?: string | null;
@@ -103,10 +103,10 @@ export interface QuestionUpdate {
   placeholder?: string;
   is_required?: boolean;
   is_active?: boolean;
+  persist_annually?: boolean;
   order_index?: number;
   options?: string[];
   validation_rules?: any;
-  show_when_status?: string | null;
   template_file_id?: string | null;
   show_if_question_id?: string | null;
   show_if_answer?: string | null;
@@ -289,14 +289,14 @@ export async function duplicateQuestion(token: string, questionId: string): Prom
 }
 
 // Reorder questions
-export async function reorderQuestions(token: string, questionIds: string[]): Promise<void> {
+export async function reorderQuestions(token: string, items: { id: string; order_index: number }[]): Promise<void> {
   const response = await fetch(`${API_URL}/api/application-builder/questions/reorder`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify(questionIds),
+    body: JSON.stringify(items),
   });
 
   if (!response.ok) {
@@ -361,14 +361,14 @@ export async function deleteHeader(token: string, headerId: string): Promise<voi
 }
 
 // Reorder headers
-export async function reorderHeaders(token: string, headerIds: string[]): Promise<void> {
+export async function reorderHeaders(token: string, items: { id: string; order_index: number }[]): Promise<void> {
   const response = await fetch(`${API_URL}/api/application-builder/headers/reorder`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify(headerIds),
+    body: JSON.stringify(items),
   });
 
   if (!response.ok) {

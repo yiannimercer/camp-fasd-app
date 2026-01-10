@@ -45,12 +45,28 @@ class UserResponse(BaseModel):
     email: EmailStr
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    phone: Optional[str] = None
     role: str
     team: Optional[str] = None
+    status: Optional[str] = "active"
     email_verified: bool
+    receive_emails: bool = True
+    email_deliverability_confirmed: bool = False
+    email_test_sent_at: Optional[datetime] = None
+    email_deliverability_confirmed_at: Optional[datetime] = None
+    created_at: datetime
+    last_login: Optional[datetime] = None
 
     class Config:
         from_attributes = True
+
+
+class ProfileUpdate(BaseModel):
+    """Schema for updating user profile"""
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
+    receive_emails: Optional[bool] = None
 
 
 class Token(BaseModel):

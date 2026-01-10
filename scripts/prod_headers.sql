@@ -1,0 +1,1 @@
+INSERT INTO application_headers VALUES ('c45d1018-7fed-4221-a66b-2dc0b97a4f1f'::uuid, 'e947a57a-8191-4720-ae55-2f4a46ddd605'::uuid, 'Behavioral Health History', 25, true, '2026-01-06 00:00:21.731775+00'::timestamptz, '2026-01-07 02:22:31.995664+00'::timestamptz);

@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useToast } from '@/components/shared/ToastNotification';
+import { ConfirmationModal } from '@/components/shared/ConfirmationModal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import FieldConfigurator, { FieldConfig } from '@/components/FieldConfigurator';
 import { Label } from '@/components/ui/label';
@@ -71,7 +73,7 @@ import {
   HeaderCreate,
   HeaderUpdate,
 } from '@/lib/api-application-builder';
-import { uploadTemplateFile } from '@/lib/api-files';
+import { uploadTemplateFile, getTemplateFile } from '@/lib/api-files';
 
 const questionTypes = [
   { value: 'text', label: 'Short Text', description: 'Single line text input' },
@@ -90,10 +92,10 @@ const questionTypes = [
   { value: 'signature', label: 'Signature', description: 'Electronic signature' },
 ];
 
-const visibilityOptions = [
-  { value: 'always', label: 'Always Visible', description: 'Show for all applicants' },
-  { value: 'accepted', label: 'After Acceptance', description: 'Show only after camper is accepted' },
-  { value: 'paid', label: 'After Payment', description: 'Show only after payment is complete' },
+const statusOptions = [
+  { value: 'all', label: 'All Statuses', description: 'Show for both Applicants and Campers' },
+  { value: 'applicant', label: 'Applicants Only', description: 'Show only while filling out the initial application' },
+  { value: 'camper', label: 'Campers Only', description: 'Show only after being accepted as a camper' },
 ];
 
 // Default field configurations for medication and allergy lists
@@ -137,6 +139,7 @@ const DEFAULT_ALLERGY_FIELDS: FieldConfig[] = [
 
 export default function ApplicationBuilderPage() {
   const { token } = useAuth();
+  const toast = useToast();
   const [sections, setSections] = useState<Section[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSection, setSelectedSection] = useState<Section | null>(null);
@@ -152,11 +155,22 @@ export default function ApplicationBuilderPage() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [draggedItem, setDraggedItem] = useState<{ sectionId: string; itemIndex: number; itemType: 'question' | 'header' } | null>(null);
 
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState<{
+    type: 'section' | 'question' | 'header' | null;
+    sectionId?: string;
+    questionId?: string;
+    headerId?: string;
+    sectionTitle?: string;
+    questionTitle?: string;
+    headerTitle?: string;
+  }>({ type: null });
+
   // Section form state
   const [sectionForm, setSectionForm] = useState({
     title: '',
     description: '',
-    show_when_status: 'always' as 'always' | 'accepted' | 'paid',
+    required_status: 'all' as 'all' | 'applicant' | 'camper',
     is_active: true,
   });
 
@@ -167,7 +181,7 @@ export default function ApplicationBuilderPage() {
     help_text: '',
     is_required: true,
     is_active: true,
-    show_when_status: null,
+    persist_annually: false,
     options: [],
     validation_rules: {},
     show_if_question_id: null,
@@ -204,7 +218,7 @@ export default function ApplicationBuilderPage() {
     setSectionForm({
       title: '',
       description: '',
-      show_when_status: 'always',
+      required_status: 'all',
       is_active: true,
     });
     setEditingSectionId(null);
@@ -215,7 +229,7 @@ export default function ApplicationBuilderPage() {
     setSectionForm({
       title: section.title,
       description: section.description || '',
-      show_when_status: (section.show_when_status || 'always') as 'always' | 'accepted' | 'paid',
+      required_status: (section.required_status || 'all') as 'all' | 'applicant' | 'camper',
       is_active: section.is_active,
     });
     setEditingSectionId(section.id);
@@ -234,7 +248,7 @@ export default function ApplicationBuilderPage() {
           title: sectionForm.title,
           description: sectionForm.description,
           is_active: sectionForm.is_active,
-          show_when_status: sectionForm.show_when_status === 'always' ? null : sectionForm.show_when_status,
+          required_status: sectionForm.required_status === 'all' ? null : sectionForm.required_status,
         });
         setSections(prev => prev.map(s => s.id === editingSectionId ? updated : s));
       } else {
@@ -244,7 +258,7 @@ export default function ApplicationBuilderPage() {
           description: sectionForm.description,
           order_index: sections.length,
           is_active: sectionForm.is_active,
-          show_when_status: sectionForm.show_when_status === 'always' ? null : sectionForm.show_when_status,
+          required_status: sectionForm.required_status === 'all' ? null : sectionForm.required_status,
         });
         setSections(prev => [...prev, created]);
       }
@@ -260,18 +274,21 @@ export default function ApplicationBuilderPage() {
     }
   };
 
-  const handleDeleteSection = async (sectionId: string) => {
-    if (!token) return;
-    if (!confirm('Are you sure you want to delete this section? All questions in this section will also be deleted.')) return;
+  const showDeleteSectionModal = (sectionId: string, sectionTitle: string) => {
+    setDeleteModal({ type: 'section', sectionId, sectionTitle });
+  };
+
+  const handleDeleteSection = async () => {
+    if (!token || !deleteModal.sectionId) return;
 
     try {
-      await deleteSection(token, sectionId);
-      setSections(prev => prev.filter(s => s.id !== sectionId));
-      setSaveStatus('success');
-      setTimeout(() => setSaveStatus('idle'), 3000);
+      await deleteSection(token, deleteModal.sectionId);
+      setSections(prev => prev.filter(s => s.id !== deleteModal.sectionId));
+      toast.success('Section deleted successfully');
+      setDeleteModal({ type: null });
     } catch (error) {
       console.error('Failed to delete section:', error);
-      setSaveStatus('error');
+      toast.error('Failed to delete section');
     }
   };
 
@@ -282,7 +299,7 @@ export default function ApplicationBuilderPage() {
       help_text: '',
       is_required: true,
       is_active: true,
-      show_when_status: 'always',
+      persist_annually: false,
       options: [],
       validation_rules: {},
       show_if_question_id: null,
@@ -308,6 +325,10 @@ export default function ApplicationBuilderPage() {
     try {
       setSaving(true);
 
+      // Question types that support options (including medication/allergy/table which store field configs in options)
+      const optionTypes = ['dropdown', 'multiple_choice', 'checkbox', 'medication_list', 'allergy_list', 'table'];
+      const supportsOptions = optionTypes.includes(questionForm.question_type || '');
+
       if (editingQuestionId) {
         // Update existing question
         const updated = await updateQuestion(token, editingQuestionId, {
@@ -318,9 +339,9 @@ export default function ApplicationBuilderPage() {
           placeholder: questionForm.placeholder,
           is_required: questionForm.is_required,
           is_active: questionForm.is_active,
-          options: questionForm.options,
+          persist_annually: questionForm.persist_annually,
+          options: supportsOptions ? questionForm.options : [],
           validation_rules: questionForm.validation_rules,
-          show_when_status: questionForm.show_when_status,
           template_file_id: questionForm.template_file_id,
           show_if_question_id: questionForm.show_if_question_id,
           show_if_answer: questionForm.show_if_answer,
@@ -353,10 +374,10 @@ export default function ApplicationBuilderPage() {
           placeholder: questionForm.placeholder,
           is_required: questionForm.is_required!,
           is_active: questionForm.is_active!,
+          persist_annually: questionForm.persist_annually,
           order_index: selectedSection.questions.length,
-          options: questionForm.options,
+          options: supportsOptions ? questionForm.options : [],
           validation_rules: questionForm.validation_rules,
-          show_when_status: questionForm.show_when_status,
           template_file_id: questionForm.template_file_id,
           show_if_question_id: questionForm.show_if_question_id,
           show_if_answer: questionForm.show_if_answer,
@@ -386,26 +407,29 @@ export default function ApplicationBuilderPage() {
     }
   };
 
-  const handleDeleteQuestion = async (sectionId: string, questionId: string) => {
-    if (!token) return;
-    if (!confirm('Are you sure you want to delete this question?')) return;
+  const showDeleteQuestionModal = (sectionId: string, questionId: string, questionTitle: string) => {
+    setDeleteModal({ type: 'question', sectionId, questionId, questionTitle });
+  };
+
+  const handleDeleteQuestion = async () => {
+    if (!token || !deleteModal.sectionId || !deleteModal.questionId) return;
 
     try {
-      await deleteQuestion(token, questionId);
+      await deleteQuestion(token, deleteModal.questionId);
       setSections(prev =>
         prev.map(section => {
-          if (section.id !== sectionId) return section;
+          if (section.id !== deleteModal.sectionId) return section;
           return {
             ...section,
-            questions: section.questions.filter(q => q.id !== questionId),
+            questions: section.questions.filter(q => q.id !== deleteModal.questionId),
           };
         })
       );
-      setSaveStatus('success');
-      setTimeout(() => setSaveStatus('idle'), 3000);
+      toast.success('Question deleted successfully');
+      setDeleteModal({ type: null });
     } catch (error) {
       console.error('Failed to delete question:', error);
-      setSaveStatus('error');
+      toast.error('Failed to delete question');
     }
   };
 
@@ -520,26 +544,29 @@ export default function ApplicationBuilderPage() {
     }
   };
 
-  const handleDeleteHeader = async (sectionId: string, headerId: string) => {
-    if (!token) return;
-    if (!confirm('Are you sure you want to delete this header?')) return;
+  const showDeleteHeaderModal = (sectionId: string, headerId: string, headerTitle: string) => {
+    setDeleteModal({ type: 'header', sectionId, headerId, headerTitle });
+  };
+
+  const handleDeleteHeader = async () => {
+    if (!token || !deleteModal.sectionId || !deleteModal.headerId) return;
 
     try {
-      await deleteHeader(token, headerId);
+      await deleteHeader(token, deleteModal.headerId);
       setSections(prev =>
         prev.map(section => {
-          if (section.id !== sectionId) return section;
+          if (section.id !== deleteModal.sectionId) return section;
           return {
             ...section,
-            headers: section.headers.filter(h => h.id !== headerId),
+            headers: section.headers.filter(h => h.id !== deleteModal.headerId),
           };
         })
       );
-      setSaveStatus('success');
-      setTimeout(() => setSaveStatus('idle'), 3000);
+      toast.success('Header deleted successfully');
+      setDeleteModal({ type: null });
     } catch (error) {
       console.error('Failed to delete header:', error);
-      setSaveStatus('error');
+      toast.error('Failed to delete header');
     }
   };
 
@@ -615,8 +642,8 @@ export default function ApplicationBuilderPage() {
       newSections[sectionIndex] = { ...section, questions: newQuestions };
       setSections(newSections);
 
-      // Save new order to backend
-      await reorderQuestions(token, newQuestions.map(q => q.id));
+      // Save new order to backend - pass {id, order_index} pairs
+      await reorderQuestions(token, newQuestions.map(q => ({ id: q.id, order_index: q.order_index })));
     } catch (error) {
       console.error('Failed to reorder questions:', error);
       // Reload sections on error
@@ -649,8 +676,8 @@ export default function ApplicationBuilderPage() {
       newSections[sectionIndex] = { ...section, questions: newQuestions };
       setSections(newSections);
 
-      // Save new order to backend
-      await reorderQuestions(token, newQuestions.map(q => q.id));
+      // Save new order to backend - pass {id, order_index} pairs
+      await reorderQuestions(token, newQuestions.map(q => ({ id: q.id, order_index: q.order_index })));
     } catch (error) {
       console.error('Failed to reorder questions:', error);
       // Reload sections on error
@@ -693,10 +720,10 @@ export default function ApplicationBuilderPage() {
     // Update state
     setSections(prev => prev.map(s => s.id === sectionId ? { ...s, headers: newHeaders, questions: newQuestions } : s));
 
-    // Save to backend
+    // Save to backend - pass {id, order_index} pairs for unified ordering
     try {
-      await reorderHeaders(token, newHeaders.map(h => h.id));
-      await reorderQuestions(token, newQuestions.map(q => q.id));
+      await reorderHeaders(token, newHeaders.map(h => ({ id: h.id, order_index: h.order_index })));
+      await reorderQuestions(token, newQuestions.map(q => ({ id: q.id, order_index: q.order_index })));
     } catch (error) {
       console.error('Failed to reorder items:', error);
       const data = await getSections(token, true);
@@ -730,10 +757,10 @@ export default function ApplicationBuilderPage() {
     // Update state
     setSections(prev => prev.map(s => s.id === sectionId ? { ...s, headers: newHeaders, questions: newQuestions } : s));
 
-    // Save to backend
+    // Save to backend - pass {id, order_index} pairs for unified ordering
     try {
-      await reorderHeaders(token, newHeaders.map(h => h.id));
-      await reorderQuestions(token, newQuestions.map(q => q.id));
+      await reorderHeaders(token, newHeaders.map(h => ({ id: h.id, order_index: h.order_index })));
+      await reorderQuestions(token, newQuestions.map(q => ({ id: q.id, order_index: q.order_index })));
     } catch (error) {
       console.error('Failed to reorder items:', error);
       const data = await getSections(token, true);
@@ -792,9 +819,9 @@ export default function ApplicationBuilderPage() {
       // Update state
       setSections(prev => prev.map(s => s.id === sectionId ? { ...s, headers: newHeaders, questions: newQuestions } : s));
 
-      // Save new order to backend
-      await reorderHeaders(token, newHeaders.map(h => h.id));
-      await reorderQuestions(token, newQuestions.map(q => q.id));
+      // Save new order to backend - pass {id, order_index} pairs for unified ordering
+      await reorderHeaders(token, newHeaders.map(h => ({ id: h.id, order_index: h.order_index })));
+      await reorderQuestions(token, newQuestions.map(q => ({ id: q.id, order_index: q.order_index })));
     } catch (error) {
       console.error('Failed to reorder items:', error);
       // Reload sections on error
@@ -924,9 +951,9 @@ export default function ApplicationBuilderPage() {
                       {!section.is_active && (
                         <Badge variant="secondary">Inactive</Badge>
                       )}
-                      {section.show_when_status !== 'always' && (
-                        <Badge variant="outline">
-                          {visibilityOptions.find(v => v.value === section.show_when_status)?.label}
+                      {section.required_status && (
+                        <Badge variant="outline" className="bg-purple-50 border-purple-300 text-purple-700">
+                          {section.required_status === 'applicant' ? 'Applicants Only' : 'Campers Only'}
                         </Badge>
                       )}
                     </div>
@@ -965,7 +992,7 @@ export default function ApplicationBuilderPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleDeleteSection(section.id)}
+                    onClick={() => showDeleteSectionModal(section.id, section.title)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -990,68 +1017,81 @@ export default function ApplicationBuilderPage() {
                           onDragOver={handleItemDragOver}
                           onDrop={() => handleItemDrop(section.id, itemIndex)}
                           onDragEnd={handleItemDragEnd}
-                          className={`flex items-start gap-3 p-4 bg-amber-50 rounded-lg border-2 border-amber-300 transition-all cursor-move ${
+                          className={`group relative rounded-lg transition-all cursor-move ${
                             draggedItem?.sectionId === section.id && draggedItem?.itemIndex === itemIndex
-                              ? 'opacity-50 border-dashed'
-                              : 'hover:bg-amber-100'
+                              ? 'opacity-50'
+                              : ''
                           }`}
                         >
-                          <GripVertical className="h-5 w-5 text-amber-600 mt-1 cursor-grab active:cursor-grabbing" />
-                          <div className="flex-1">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                  <p className="text-lg font-bold text-amber-900">
-                                    {header.header_text}
-                                  </p>
-                                  {!header.is_active && (
-                                    <Badge variant="secondary" className="text-xs">Inactive</Badge>
-                                  )}
-                                </div>
-                                <p className="text-xs text-amber-700 mt-1">
-                                  Section Header - Questions below will be grouped under this
-                                </p>
+                          {/* Sub-section divider header with left accent bar */}
+                          <div className={`flex items-center gap-3 py-3 px-4 bg-gradient-to-r from-amber-50 to-orange-50/50 border border-amber-200/60 rounded-lg shadow-sm ${
+                            draggedItem?.sectionId === section.id && draggedItem?.itemIndex === itemIndex
+                              ? 'border-dashed border-amber-400'
+                              : 'hover:shadow-md hover:border-amber-300'
+                          }`}>
+                            {/* Left accent bar */}
+                            <div className="absolute left-0 top-2 bottom-2 w-1 bg-gradient-to-b from-amber-400 to-orange-400 rounded-full" />
+
+                            {/* Drag handle */}
+                            <GripVertical className="h-5 w-5 text-amber-500/70 cursor-grab active:cursor-grabbing flex-shrink-0 ml-1" />
+
+                            {/* Header content */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-base font-semibold text-amber-900 tracking-tight">
+                                  {header.header_text}
+                                </h4>
+                                {!header.is_active && (
+                                  <Badge variant="outline" className="text-xs bg-gray-100 text-gray-500 border-gray-300">
+                                    Inactive
+                                  </Badge>
+                                )}
                               </div>
-                              <div className="flex gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => moveItemUp(section.id, itemIndex)}
-                                  disabled={itemIndex === 0}
-                                  title="Move up"
-                                  className="hover:bg-amber-100"
-                                >
-                                  <MoveUp className="h-3 w-3 text-amber-700" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => moveItemDown(section.id, itemIndex)}
-                                  disabled={itemIndex === items.length - 1}
-                                  title="Move down"
-                                  className="hover:bg-amber-100"
-                                >
-                                  <MoveDown className="h-3 w-3 text-amber-700" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleEditHeader(section.id, header)}
-                                  title="Edit header"
-                                  className="hover:bg-amber-100"
-                                >
-                                  <Edit className="h-3 w-3 text-amber-700" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDeleteHeader(section.id, header.id)}
-                                  title="Delete header"
-                                  className="hover:bg-amber-100"
-                                >
-                                  <Trash2 className="h-3 w-3 text-amber-700" />
-                                </Button>
-                              </div>
+                              <p className="text-xs text-amber-600/80 mt-0.5">
+                                Section Header - Questions below will be grouped under this
+                              </p>
+                            </div>
+
+                            {/* Action buttons - appear on hover */}
+                            <div className="flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => moveItemUp(section.id, itemIndex)}
+                                disabled={itemIndex === 0}
+                                title="Move up"
+                                className="h-7 w-7 p-0 hover:bg-amber-100/80"
+                              >
+                                <MoveUp className="h-3.5 w-3.5 text-amber-700" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => moveItemDown(section.id, itemIndex)}
+                                disabled={itemIndex === items.length - 1}
+                                title="Move down"
+                                className="h-7 w-7 p-0 hover:bg-amber-100/80"
+                              >
+                                <MoveDown className="h-3.5 w-3.5 text-amber-700" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEditHeader(section.id, header)}
+                                title="Edit header"
+                                className="h-7 w-7 p-0 hover:bg-amber-100/80"
+                              >
+                                <Edit className="h-3.5 w-3.5 text-amber-700" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => showDeleteHeaderModal(section.id, header.id, header.header_text)}
+                                title="Delete header"
+                                className="h-7 w-7 p-0 hover:bg-red-100/80"
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                              </Button>
                             </div>
                           </div>
                         </div>
@@ -1097,12 +1137,8 @@ export default function ApplicationBuilderPage() {
                               <Badge variant="outline" className="text-xs">
                                 {questionTypes.find(t => t.value === question.question_type)?.label}
                               </Badge>
-                              {question.show_when_status !== 'always' && (
-                                <Badge variant="outline" className="text-xs">
-                                  {visibilityOptions.find(v => v.value === question.show_when_status)?.label}
-                                </Badge>
-                              )}
-                              {question.options && question.options.length > 0 && (
+                              {question.options && question.options.length > 0 &&
+                               ['dropdown', 'multiple_choice', 'checkbox'].includes(question.question_type) && (
                                 <Badge variant="outline" className="text-xs">
                                   {question.options.length} options
                                 </Badge>
@@ -1141,6 +1177,15 @@ export default function ApplicationBuilderPage() {
                                 >
                                   <Download className="h-3 w-3" />
                                   {question.template_filename}
+                                </Badge>
+                              )}
+                              {question.persist_annually && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs bg-amber-50 border-amber-300 text-amber-700"
+                                  title="Response will persist during annual reset"
+                                >
+                                  📌 Persists Annually
                                 </Badge>
                               )}
                             </div>
@@ -1202,7 +1247,7 @@ export default function ApplicationBuilderPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDeleteQuestion(section.id, question.id)}
+                              onClick={() => showDeleteQuestionModal(section.id, question.id, question.question_text)}
                               title="Delete question"
                             >
                               <Trash2 className="h-3 w-3" />
@@ -1276,18 +1321,18 @@ export default function ApplicationBuilderPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="section-visibility">When to Show</Label>
+              <Label htmlFor="section-status">Application Status</Label>
               <Select
-                value={sectionForm.show_when_status}
+                value={sectionForm.required_status}
                 onValueChange={(value: any) =>
-                  setSectionForm(prev => ({ ...prev, show_when_status: value }))
+                  setSectionForm(prev => ({ ...prev, required_status: value }))
                 }
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {visibilityOptions.map((option) => (
+                  {statusOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       <div>
                         <div className="font-medium">{option.label}</div>
@@ -1436,11 +1481,30 @@ export default function ApplicationBuilderPage() {
                 {questionForm.template_file_id ? (
                   <div className="flex items-center gap-2 p-3 bg-white rounded border border-green-300">
                     <FileText className="h-4 w-4 text-green-600" />
-                    <span className="text-sm flex-1">Template file attached</span>
+                    <span className="text-sm flex-1 truncate" title={questionForm.template_filename || 'Template file'}>
+                      {questionForm.template_filename || 'Template file attached'}
+                    </span>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => setQuestionForm(prev => ({ ...prev, template_file_id: null }))}
+                      onClick={async () => {
+                        if (!token || !questionForm.template_file_id) return
+                        try {
+                          const fileInfo = await getTemplateFile(token, questionForm.template_file_id)
+                          window.open(fileInfo.url, '_blank')
+                        } catch (error) {
+                          console.error('Failed to get template file:', error)
+                        }
+                      }}
+                      title="View/Download"
+                    >
+                      <Download className="h-4 w-4 text-blue-600" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setQuestionForm(prev => ({ ...prev, template_file_id: null, template_filename: null }))}
+                      title="Remove template"
                     >
                       <Trash2 className="h-4 w-4 text-red-600" />
                     </Button>
@@ -1457,7 +1521,11 @@ export default function ApplicationBuilderPage() {
                         try {
                           setSaving(true)
                           const result = await uploadTemplateFile(token, file)
-                          setQuestionForm(prev => ({ ...prev, template_file_id: result.file_id }))
+                          setQuestionForm(prev => ({
+                            ...prev,
+                            template_file_id: result.file_id,
+                            template_filename: result.filename
+                          }))
                           setSaveStatus('success')
                           setTimeout(() => setSaveStatus('idle'), 2000)
                         } catch (error) {
@@ -1505,30 +1573,6 @@ export default function ApplicationBuilderPage() {
                 </div>
               </div>
             )}
-
-            <div className="space-y-2">
-              <Label htmlFor="question-visibility">When to Show</Label>
-              <Select
-                value={questionForm.show_when_status || 'always'}
-                onValueChange={(value: any) =>
-                  setQuestionForm(prev => ({ ...prev, show_when_status: value }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {visibilityOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      <div>
-                        <div className="font-medium">{option.label}</div>
-                        <div className="text-xs text-muted-foreground">{option.description}</div>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
 
             <Separator />
 
@@ -1817,6 +1861,24 @@ export default function ApplicationBuilderPage() {
                 />
               </div>
             </div>
+
+            {/* Persist Annually toggle */}
+            <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-amber-900">Persist Annually</Label>
+                  <div className="text-sm text-amber-700">
+                    Keep this response during annual reset (e.g., camper name, date of birth)
+                  </div>
+                </div>
+                <Switch
+                  checked={questionForm.persist_annually || false}
+                  onCheckedChange={(checked) =>
+                    setQuestionForm(prev => ({ ...prev, persist_annually: checked }))
+                  }
+                />
+              </div>
+            </div>
           </div>
 
           <DialogFooter>
@@ -1888,6 +1950,61 @@ export default function ApplicationBuilderPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Section Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={deleteModal.type === 'section'}
+        onClose={() => setDeleteModal({ type: null })}
+        onConfirm={handleDeleteSection}
+        title="Delete Section"
+        message={
+          <>
+            Are you sure you want to delete{' '}
+            <span className="font-semibold">"{deleteModal.sectionTitle}"</span>?
+            <div className="mt-3 p-3 bg-red-50 rounded-lg text-xs text-red-800">
+              <p>All questions in this section will also be deleted. This action cannot be undone.</p>
+            </div>
+          </>
+        }
+        confirmLabel="Delete Section"
+        theme="danger"
+      />
+
+      {/* Delete Question Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={deleteModal.type === 'question'}
+        onClose={() => setDeleteModal({ type: null })}
+        onConfirm={handleDeleteQuestion}
+        title="Delete Question"
+        message={
+          <>
+            Are you sure you want to delete this question?
+            <div className="mt-2 p-2 bg-gray-50 rounded text-sm text-gray-700 font-medium truncate">
+              "{deleteModal.questionTitle}"
+            </div>
+          </>
+        }
+        confirmLabel="Delete Question"
+        theme="danger"
+      />
+
+      {/* Delete Header Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={deleteModal.type === 'header'}
+        onClose={() => setDeleteModal({ type: null })}
+        onConfirm={handleDeleteHeader}
+        title="Delete Header"
+        message={
+          <>
+            Are you sure you want to delete this header?
+            <div className="mt-2 p-2 bg-gray-50 rounded text-sm text-gray-700 font-medium truncate">
+              "{deleteModal.headerTitle}"
+            </div>
+          </>
+        }
+        confirmLabel="Delete Header"
+        theme="danger"
+      />
     </div>
   );
 }

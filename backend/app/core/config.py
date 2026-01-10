@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     SUPABASE_URL: str
     SUPABASE_KEY: str
+    SUPABASE_JWT_SECRET: str = ""  # JWT secret for validating Supabase auth tokens
 
     # OAuth
     GOOGLE_CLIENT_ID: str
@@ -35,10 +36,14 @@ class Settings(BaseSettings):
     STRIPE_PUBLISHABLE_KEY: str
     STRIPE_WEBHOOK_SECRET: str
 
-    # SendGrid
-    SENDGRID_API_KEY: str
-    SENDGRID_FROM_EMAIL: str
-    SENDGRID_FROM_NAME: str = "CAMP FASD"
+    # Resend (Email Service)
+    RESEND_API_KEY: str = ""  # Will be set via environment variable
+    RESEND_FROM_EMAIL: str = "apps@fasdcamp.org"
+    RESEND_FROM_NAME: str = "CAMP - A FASD Community"
+
+    # Frontend URL (differs per environment)
+    # Local: http://localhost:3000, Dev: https://app-dev.fasdcamp.org, Prod: https://app.fasdcamp.org
+    FRONTEND_URL: str = "http://localhost:3000"
 
     # File Upload
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB

@@ -36,10 +36,10 @@ class QuestionBase(BaseModel):
     placeholder: Optional[str] = None
     is_required: bool = False
     is_active: bool = True
+    persist_annually: bool = False  # Keep response during annual reset
     order_index: int
     options: Optional[Union[List[str], Dict[str, Any]]] = None
     validation_rules: Optional[QuestionValidationRules] = None
-    show_when_status: Optional[str] = None
     template_file_id: Optional[UUID] = None
     show_if_question_id: Optional[UUID] = None
     show_if_answer: Optional[str] = None
@@ -59,10 +59,10 @@ class QuestionUpdate(BaseModel):
     placeholder: Optional[str] = None
     is_required: Optional[bool] = None
     is_active: Optional[bool] = None
+    persist_annually: Optional[bool] = None
     order_index: Optional[int] = None
     options: Optional[Union[List[str], Dict[str, Any]]] = None
     validation_rules: Optional[QuestionValidationRules] = None
-    show_when_status: Optional[str] = None
     template_file_id: Optional[UUID] = None
     show_if_question_id: Optional[UUID] = None
     show_if_answer: Optional[str] = None
@@ -85,7 +85,7 @@ class SectionBase(BaseModel):
     description: Optional[str] = None
     order_index: int
     is_active: bool = True
-    show_when_status: Optional[str] = None
+    required_status: Optional[str] = None  # NULL=all, 'applicant'=applicant only, 'camper'=camper only
 
 
 class SectionCreate(SectionBase):
@@ -97,7 +97,7 @@ class SectionUpdate(BaseModel):
     description: Optional[str] = None
     order_index: Optional[int] = None
     is_active: Optional[bool] = None
-    show_when_status: Optional[str] = None
+    required_status: Optional[str] = None  # NULL=all, 'applicant', 'camper'
 
 
 class SectionWithQuestions(SectionBase):
@@ -137,6 +137,12 @@ class HeaderResponse(HeaderBase):
         from_attributes = True
 
 
+# Reorder item for unified ordering of questions and headers
+class ReorderItem(BaseModel):
+    id: UUID
+    order_index: int
+
+
 # Helper function to check super admin
 def require_super_admin(current_user: User = Depends(get_current_user)):
     if current_user.role != "super_admin":
@@ -165,7 +171,7 @@ def convert_section_to_response(section: ApplicationSection) -> dict:
         "description": section.description,
         "order_index": section.order_index,
         "is_active": section.is_active,
-        "show_when_status": section.show_when_status,
+        "required_status": section.required_status,  # NULL=all, 'applicant', 'camper'
         "created_at": section.created_at.isoformat(),
         "updated_at": section.updated_at.isoformat(),
         "questions": [convert_question_to_response(q) for q in section.questions],
@@ -200,10 +206,10 @@ def convert_question_to_response(question: ApplicationQuestion) -> dict:
         "placeholder": question.placeholder,
         "is_required": question.is_required,
         "is_active": question.is_active,
+        "persist_annually": question.persist_annually,
         "order_index": question.order_index,
         "options": question.options,
         "validation_rules": question.validation_rules,
-        "show_when_status": question.show_when_status,
         "template_file_id": str(question.template_file_id) if question.template_file_id else None,
         "template_filename": template_filename,
         "show_if_question_id": str(question.show_if_question_id) if question.show_if_question_id else None,
@@ -244,17 +250,12 @@ async def create_section(
 ):
     """Create a new application section"""
 
-    # Convert 'always' to NULL for show_when_status (database constraint)
-    show_when_status_value = section.show_when_status
-    if show_when_status_value == 'always':
-        show_when_status_value = None
-
     new_section = ApplicationSection(
         title=section.title,
         description=section.description,
         order_index=section.order_index,
         is_active=section.is_active,
-        show_when_status=show_when_status_value
+        required_status=section.required_status  # NULL=all, 'applicant', 'camper'
     )
 
     db.add(new_section)
@@ -292,12 +293,8 @@ async def update_section(
         db_section.order_index = section.order_index
     if section.is_active is not None:
         db_section.is_active = section.is_active
-    if section.show_when_status is not None:
-        # Convert 'always' to NULL for show_when_status (database constraint)
-        show_when_status_value = section.show_when_status
-        if show_when_status_value == 'always':
-            show_when_status_value = None
-        db_section.show_when_status = show_when_status_value
+    if section.required_status is not None:
+        db_section.required_status = section.required_status  # NULL=all, 'applicant', 'camper'
 
     db.commit()
     db.refresh(db_section)
@@ -348,11 +345,6 @@ async def create_question(
     if question.validation_rules:
         validation_rules_dict = question.validation_rules.dict()
 
-    # Convert 'always' to NULL for show_when_status (database constraint)
-    show_when_status_value = question.show_when_status
-    if show_when_status_value == 'always':
-        show_when_status_value = None
-
     new_question = ApplicationQuestion(
         section_id=question.section_id,
         question_text=question.question_text,
@@ -361,10 +353,10 @@ async def create_question(
         placeholder=question.placeholder,
         is_required=question.is_required,
         is_active=question.is_active,
+        persist_annually=question.persist_annually,
         order_index=question.order_index,
         options=question.options,
         validation_rules=validation_rules_dict,
-        show_when_status=show_when_status_value,
         template_file_id=question.template_file_id,
         show_if_question_id=question.show_if_question_id,
         show_if_answer=question.show_if_answer,
@@ -410,18 +402,14 @@ async def update_question(
         db_question.is_required = question.is_required
     if question.is_active is not None:
         db_question.is_active = question.is_active
+    if question.persist_annually is not None:
+        db_question.persist_annually = question.persist_annually
     if question.order_index is not None:
         db_question.order_index = question.order_index
     if question.options is not None:
         db_question.options = question.options
     if question.validation_rules is not None:
         db_question.validation_rules = question.validation_rules.dict()
-    if question.show_when_status is not None:
-        # Convert 'always' to NULL for show_when_status (database constraint)
-        show_when_status_value = question.show_when_status
-        if show_when_status_value == 'always':
-            show_when_status_value = None
-        db_question.show_when_status = show_when_status_value
     if question.template_file_id is not None:
         db_question.template_file_id = question.template_file_id
     if question.show_if_question_id is not None:
@@ -495,10 +483,10 @@ async def duplicate_question(
         placeholder=original_question.placeholder,
         is_required=original_question.is_required,
         is_active=original_question.is_active,
+        persist_annually=original_question.persist_annually,
         order_index=original_question.order_index + 1,  # Place right after original
         options=original_question.options,
         validation_rules=original_question.validation_rules,
-        show_when_status=original_question.show_when_status,
         template_file_id=original_question.template_file_id,
         show_if_question_id=original_question.show_if_question_id,
         show_if_answer=original_question.show_if_answer,
@@ -534,17 +522,17 @@ async def reorder_sections(
 
 @router.post("/questions/reorder")
 async def reorder_questions(
-    question_ids: List[UUID],
+    items: List[ReorderItem],
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin)
 ):
-    """Reorder questions within a section by providing ordered list of question IDs"""
+    """Reorder questions by providing list of {id, order_index} pairs"""
 
-    # Update order_index for each question
-    for index, question_id in enumerate(question_ids):
+    # Update order_index for each question using the provided order_index
+    for item in items:
         db.query(ApplicationQuestion).filter(
-            ApplicationQuestion.id == question_id
-        ).update({"order_index": index})
+            ApplicationQuestion.id == item.id
+        ).update({"order_index": item.order_index})
 
     db.commit()
 
@@ -635,17 +623,17 @@ async def delete_header(
 
 @router.post("/headers/reorder")
 async def reorder_headers(
-    header_ids: List[UUID],
+    items: List[ReorderItem],
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin)
 ):
-    """Reorder headers within a section by providing ordered list of header IDs"""
+    """Reorder headers by providing list of {id, order_index} pairs"""
 
-    # Update order_index for each header
-    for index, header_id in enumerate(header_ids):
+    # Update order_index for each header using the provided order_index
+    for item in items:
         db.query(ApplicationHeader).filter(
-            ApplicationHeader.id == header_id
-        ).update({"order_index": index})
+            ApplicationHeader.id == item.id
+        ).update({"order_index": item.order_index})
 
     db.commit()
 

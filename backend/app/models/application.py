@@ -19,7 +19,8 @@ class ApplicationSection(Base):
     order_index = Column(Integer, nullable=False)
     is_active = Column(Boolean, default=True, server_default="true")
     visible_before_acceptance = Column(Boolean, default=True, server_default="true")
-    show_when_status = Column(String(20), nullable=True)  # 'accepted', 'paid', or NULL for always visible
+    required_status = Column(String(50), nullable=True)  # NULL=all, 'applicant'=applicant only, 'camper'=camper only
+    score_calculation_type = Column(String(50), nullable=True)  # e.g., 'fasd_best' for FASD BeST score calculation
     created_at = Column(DateTime(timezone=True), server_default=text("NOW()"))
     updated_at = Column(DateTime(timezone=True), server_default=text("NOW()"), onupdate=text("NOW()"))
 
@@ -62,14 +63,14 @@ class ApplicationQuestion(Base):
     question_type = Column(String(50), nullable=False)  # text, textarea, dropdown, etc.
     options = Column(JSONB)  # For dropdown/multiple choice options
     is_required = Column(Boolean, default=False, server_default="false")
-    reset_annually = Column(Boolean, default=False, server_default="false")
+    reset_annually = Column(Boolean, default=False, server_default="false")  # Legacy field
+    persist_annually = Column(Boolean, default=False, server_default="false")  # Keep response during annual reset
     order_index = Column(Integer, nullable=False)
     validation_rules = Column(JSONB)
     help_text = Column(Text)
     description = Column(Text)  # Long-form markdown description displayed above question
     placeholder = Column(Text)
     is_active = Column(Boolean, default=True, server_default="true")
-    show_when_status = Column(String(20), nullable=True)  # 'accepted', 'paid', or NULL for always visible
     template_file_id = Column(UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"), nullable=True)  # Optional template file to download
     show_if_question_id = Column(UUID(as_uuid=True), ForeignKey("application_questions.id", ondelete="CASCADE"), nullable=True)  # Show only if this question has specific answer
     show_if_answer = Column(Text, nullable=True)  # The answer value that triggers showing this question
@@ -95,29 +96,47 @@ class Application(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     camper_first_name = Column(String(100))
     camper_last_name = Column(String(100))
-    status = Column(String(50), default="in_progress", server_default="in_progress")
+    status = Column(String(50), default="applicant", server_default="applicant")  # applicant, camper, inactive
+    sub_status = Column(String(50), default="not_started", server_default="not_started")  # Progress within status
     completion_percentage = Column(Integer, default=0, server_default="0")
     is_returning_camper = Column(Boolean, default=False, server_default="false")
     cabin_assignment = Column(String(50))
     application_data = Column(JSONB, default={}, server_default=text("'{}'::jsonb"))
 
-    # Approval tracking
-    ops_approved = Column(Boolean, default=False, server_default="false")
-    behavioral_approved = Column(Boolean, default=False, server_default="false")
-    medical_approved = Column(Boolean, default=False, server_default="false")
-    ops_approved_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    behavioral_approved_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    medical_approved_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    ops_approved_at = Column(DateTime(timezone=True))
-    behavioral_approved_at = Column(DateTime(timezone=True))
-    medical_approved_at = Column(DateTime(timezone=True))
+    # Payment tracking
+    paid_invoice = Column(Boolean, nullable=True)  # NULL=no invoice, False=unpaid, True=paid
+    stripe_invoice_id = Column(String(255), nullable=True)  # Stripe invoice ID
+    stripe_customer_id = Column(String(255), nullable=True)  # Stripe customer ID (cached from user)
+
+    # Camper metadata for admin table
+    camper_age = Column(Integer, nullable=True)
+    camper_gender = Column(String(50), nullable=True)
+    tuition_status = Column(String(50), nullable=True)
+
+    # FASD BeST Score - auto-calculated from FASD Screener responses
+    # NULL if not all questions answered, otherwise sum of scores
+    fasd_best_score = Column(Integer, nullable=True)
+
+    # Note: Team approvals are tracked in application_approvals table, not here
+
+    # Legacy WordPress migration fields
+    legacy_wp_camper_id = Column(Integer, nullable=True, index=True)  # WordPress camper post ID from migration
 
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=text("NOW()"))
     updated_at = Column(DateTime(timezone=True), server_default=text("NOW()"), onupdate=text("NOW()"))
-    completed_at = Column(DateTime(timezone=True))  # When application reached 100%
-    accepted_at = Column(DateTime(timezone=True))
-    declined_at = Column(DateTime(timezone=True))
+    completed_at = Column(DateTime(timezone=True))  # When applicant reached 100%
+    under_review_at = Column(DateTime(timezone=True))  # When first admin action received
+    promoted_to_camper_at = Column(DateTime(timezone=True))  # When promoted to camper status
+    waitlisted_at = Column(DateTime(timezone=True))  # When moved to waitlist
+    deferred_at = Column(DateTime(timezone=True))  # When deferred
+    withdrawn_at = Column(DateTime(timezone=True))  # When withdrawn
+    rejected_at = Column(DateTime(timezone=True))  # When rejected
+    deactivated_at = Column(DateTime(timezone=True))  # When deactivated (generic inactive)
+    reactivated_at = Column(DateTime(timezone=True))  # When reactivated by user
+    paid_at = Column(DateTime(timezone=True))  # When payment received
+    accepted_at = Column(DateTime(timezone=True))  # Legacy - kept for migration
+    declined_at = Column(DateTime(timezone=True))  # Legacy - kept for migration
 
     # Relationships
     user = relationship("User", foreign_keys=[user_id])
@@ -204,6 +223,9 @@ class ApplicationApproval(Base):
     application_id = Column(UUID(as_uuid=True), ForeignKey("applications.id", ondelete="CASCADE"), nullable=False)
     admin_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     approved = Column(Boolean, nullable=False)  # True = approve, False = decline
+    note = Column(Text, nullable=True)  # Required note explaining the decision
+    admin_name = Column(String(255), nullable=True)  # Denormalized admin name for history
+    admin_team = Column(String(50), nullable=True)  # ops, behavioral, med, lit
     created_at = Column(DateTime(timezone=True), server_default=text("NOW()"))
 
     # Relationships
@@ -282,3 +304,47 @@ class Allergy(Base):
 
     def __repr__(self):
         return f"<Allergy {self.allergen}>"
+
+
+class Invoice(Base):
+    """Invoice for payment tracking"""
+
+    __tablename__ = "invoices"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("uuid_generate_v4()"))
+    application_id = Column(UUID(as_uuid=True), ForeignKey("applications.id", ondelete="CASCADE"))
+    stripe_invoice_id = Column(String(255), unique=True, nullable=True)
+    amount = Column(DECIMAL(10, 2), nullable=False)
+    discount_amount = Column(DECIMAL(10, 2), default=0, server_default="0")
+    scholarship_applied = Column(Boolean, default=False, server_default="false")
+    scholarship_note = Column(Text, nullable=True)
+    status = Column(String(50), default="draft", server_default="draft")  # draft, open, paid, void, uncollectible
+    paid_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Payment plan fields
+    payment_number = Column(Integer, default=1, server_default="1")
+    total_payments = Column(Integer, default=1, server_default="1")
+    due_date = Column(DateTime(timezone=True), nullable=True)
+
+    # Stripe URLs
+    stripe_invoice_url = Column(Text, nullable=True)
+    stripe_hosted_url = Column(Text, nullable=True)
+
+    # Void tracking
+    voided_at = Column(DateTime(timezone=True), nullable=True)
+    voided_reason = Column(Text, nullable=True)
+
+    # Metadata
+    description = Column(Text, nullable=True)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=text("NOW()"))
+    updated_at = Column(DateTime(timezone=True), server_default=text("NOW()"), onupdate=text("NOW()"))
+
+    # Relationships
+    application = relationship("Application", foreign_keys=[application_id])
+    creator = relationship("User", foreign_keys=[created_by])
+
+    def __repr__(self):
+        return f"<Invoice {self.id} - ${self.amount} - {self.status}>"

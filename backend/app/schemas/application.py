@@ -14,7 +14,8 @@ class ApplicationSectionBase(BaseModel):
     order_index: int
     is_active: bool = True
     visible_before_acceptance: bool = True
-    show_when_status: Optional[str] = None
+    required_status: Optional[str] = None  # NULL=all, 'applicant'=applicant only, 'camper'=camper only
+    score_calculation_type: Optional[str] = None  # e.g., 'fasd_best' for FASD BeST score calculation
 
 
 class ApplicationSection(ApplicationSectionBase):
@@ -33,14 +34,14 @@ class ApplicationQuestionBase(BaseModel):
     question_type: str  # text, textarea, dropdown, multiple_choice, file_upload, checkbox, date, email, phone, signature
     options: Optional[Any] = None  # Can be array or dict
     is_required: bool = False
-    reset_annually: bool = False
+    reset_annually: bool = False  # Legacy field
+    persist_annually: bool = False  # Keep response during annual reset
     order_index: int
     validation_rules: Optional[Any] = None  # Can be array or dict
     help_text: Optional[str] = None
     description: Optional[str] = None  # Long-form markdown description
     placeholder: Optional[str] = None
     is_active: bool = True
-    show_when_status: Optional[str] = None
     # Conditional logic fields
     show_if_question_id: Optional[UUID4] = None
     show_if_answer: Optional[str] = None
@@ -60,9 +61,25 @@ class ApplicationQuestion(ApplicationQuestionBase):
         from_attributes = True
 
 
+# Section Header Schema (for sub-section dividers within a section)
+class ApplicationHeader(BaseModel):
+    """Header for grouping questions within a section"""
+    id: UUID4
+    section_id: UUID4
+    header_text: str
+    order_index: int
+    is_active: bool = True
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class ApplicationSectionWithQuestions(ApplicationSection):
-    """Section with its questions included"""
+    """Section with its questions and headers included"""
     questions: List[ApplicationQuestion] = []
+    headers: List[ApplicationHeader] = []
 
     class Config:
         from_attributes = True
@@ -108,13 +125,33 @@ class ApplicationUpdate(BaseModel):
 class Application(ApplicationBase):
     id: UUID4
     user_id: UUID4
-    status: str
+    status: str  # applicant, camper, inactive
+    sub_status: str  # not_started, incomplete, completed, under_review, waitlist, complete, deferred, withdrawn, rejected
     completion_percentage: int
     is_returning_camper: bool
     cabin_assignment: Optional[str] = None
+    # Payment tracking
+    paid_invoice: Optional[bool] = None  # NULL=no invoice, False=unpaid, True=paid
+    stripe_invoice_id: Optional[str] = None
+    # Camper metadata
+    camper_age: Optional[int] = None
+    camper_gender: Optional[str] = None
+    tuition_status: Optional[str] = None
+    # FASD BeST Score - auto-calculated from FASD Screener responses
+    fasd_best_score: Optional[int] = None  # NULL if not all questions answered
+    # Profile photo URL (pre-signed URL for displaying camper photo)
+    profile_photo_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-    completed_at: Optional[datetime] = None  # When application reached 100%
+    # Status timestamps
+    completed_at: Optional[datetime] = None  # When applicant reached 100%
+    under_review_at: Optional[datetime] = None  # When first admin action received
+    promoted_to_camper_at: Optional[datetime] = None  # When promoted to camper status
+    waitlisted_at: Optional[datetime] = None  # When moved to waitlist
+    deferred_at: Optional[datetime] = None  # When deferred
+    withdrawn_at: Optional[datetime] = None  # When withdrawn
+    rejected_at: Optional[datetime] = None  # When rejected
+    paid_at: Optional[datetime] = None  # When payment received
 
     class Config:
         from_attributes = True

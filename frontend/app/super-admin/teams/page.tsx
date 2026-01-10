@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -15,262 +15,440 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   Plus,
   Edit,
-  Trash2,
   Users,
   UserPlus,
-  UserMinus,
   Loader2,
   CheckCircle2,
   AlertCircle,
   Mail,
-  Shield
+  RefreshCw,
+  Palette
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useAuth } from '@/lib/contexts/AuthContext';
+import {
+  getAllTeams,
+  createTeam,
+  updateTeam,
+  getAllUsers,
+  updateUser,
+  Team,
+  UserWithDetails
+} from '@/lib/api-super-admin';
 
-interface TeamMember {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  avatar?: string;
-}
-
-interface Team {
-  id: string;
-  name: string;
-  description: string;
-  color: string;
-  memberCount: number;
-  members: TeamMember[];
-  permissions: string[];
-  createdAt: string;
-}
-
-const teamColors = [
-  { value: 'blue', label: 'Blue', class: 'bg-blue-500' },
-  { value: 'green', label: 'Green', class: 'bg-green-500' },
-  { value: 'purple', label: 'Purple', class: 'bg-purple-500' },
-  { value: 'orange', label: 'Orange', class: 'bg-orange-500' },
-  { value: 'pink', label: 'Pink', class: 'bg-pink-500' },
-  { value: 'yellow', label: 'Yellow', class: 'bg-yellow-500' },
+// Rich color palette for teams - more variety than status colors
+const TEAM_COLOR_PRESETS = [
+  // Blues
+  { hex: '#3B82F6', name: 'Blue' },
+  { hex: '#1D4ED8', name: 'Royal Blue' },
+  { hex: '#0EA5E9', name: 'Sky' },
+  { hex: '#06B6D4', name: 'Cyan' },
+  // Greens
+  { hex: '#10B981', name: 'Emerald' },
+  { hex: '#22C55E', name: 'Green' },
+  { hex: '#84CC16', name: 'Lime' },
+  { hex: '#14B8A6', name: 'Teal' },
+  // Purples & Pinks
+  { hex: '#8B5CF6', name: 'Violet' },
+  { hex: '#A855F7', name: 'Purple' },
+  { hex: '#EC4899', name: 'Pink' },
+  { hex: '#F472B6', name: 'Rose' },
+  // Warm colors
+  { hex: '#F59E0B', name: 'Amber' },
+  { hex: '#F97316', name: 'Orange' },
+  { hex: '#EF4444', name: 'Red' },
+  { hex: '#DC2626', name: 'Crimson' },
+  // Neutrals
+  { hex: '#64748B', name: 'Slate' },
+  { hex: '#78716C', name: 'Stone' },
+  { hex: '#6B7280', name: 'Gray' },
+  { hex: '#374151', name: 'Charcoal' },
 ];
 
-const availablePermissions = [
-  { value: 'view_applications', label: 'View Applications' },
-  { value: 'edit_applications', label: 'Edit Applications' },
-  { value: 'review_applications', label: 'Review Applications' },
-  { value: 'approve_applications', label: 'Approve Applications' },
-  { value: 'manage_users', label: 'Manage Users' },
-  { value: 'view_analytics', label: 'View Analytics' },
-];
+// Validate hex color format
+function isValidHex(color: string): boolean {
+  return /^#[0-9A-Fa-f]{6}$/.test(color);
+}
+
+// ============================================================================
+// TEAM COLOR PICKER COMPONENT
+// ============================================================================
+function TeamColorPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (color: string) => void;
+}) {
+  const [customColor, setCustomColor] = useState(value);
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    setCustomColor(value);
+  }, [value]);
+
+  const handlePresetClick = (color: string) => {
+    onChange(color);
+    setIsOpen(false);
+  };
+
+  const handleCustomChange = (input: string) => {
+    let formatted = input.startsWith('#') ? input : `#${input}`;
+    formatted = formatted.toUpperCase();
+    setCustomColor(formatted);
+    if (isValidHex(formatted)) {
+      onChange(formatted);
+    }
+  };
+
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className="group flex items-center gap-3 w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all duration-150"
+          type="button"
+        >
+          <div
+            className="w-6 h-6 rounded-lg ring-1 ring-black/10 shadow-inner flex-shrink-0"
+            style={{ backgroundColor: value }}
+          />
+          <span className="text-sm font-mono text-gray-600 group-hover:text-gray-900 transition-colors">
+            {value}
+          </span>
+          <Palette className="w-4 h-4 text-gray-400 ml-auto" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-4 shadow-xl border-gray-200" align="start">
+        <div className="space-y-4">
+          {/* Preset Colors Grid */}
+          <div>
+            <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3 block">
+              Preset Colors
+            </Label>
+            <div className="grid grid-cols-5 gap-2">
+              {TEAM_COLOR_PRESETS.map((preset) => (
+                <TooltipProvider key={preset.hex} delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className={`w-10 h-10 rounded-lg transition-all duration-150 ${
+                          value === preset.hex
+                            ? 'ring-2 ring-camp-green ring-offset-2 scale-110'
+                            : 'ring-1 ring-black/10 hover:ring-black/25 hover:scale-105'
+                        }`}
+                        style={{ backgroundColor: preset.hex }}
+                        onClick={() => handlePresetClick(preset.hex)}
+                      />
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                      <span className="font-medium">{preset.name}</span>
+                      <span className="text-gray-400 font-mono ml-1.5">{preset.hex}</span>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ))}
+            </div>
+          </div>
+
+          <Separator className="bg-gray-100" />
+
+          {/* Custom Hex Input */}
+          <div>
+            <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2.5 block">
+              Custom Color
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                value={customColor}
+                onChange={(e) => handleCustomChange(e.target.value)}
+                placeholder="#3B82F6"
+                className="font-mono text-sm h-10"
+                maxLength={7}
+              />
+              <div
+                className="w-10 h-10 rounded-lg ring-1 ring-black/10 flex-shrink-0 shadow-inner"
+                style={{
+                  backgroundColor: isValidHex(customColor) ? customColor : '#FFF',
+                }}
+              />
+            </div>
+            {!isValidHex(customColor) && customColor.length > 1 && (
+              <p className="text-xs text-red-500 mt-1.5">
+                Enter a valid hex code (e.g., #3B82F6)
+              </p>
+            )}
+          </div>
+
+          {/* Live Preview */}
+          <div>
+            <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2.5 block">
+              Preview
+            </Label>
+            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+              <div
+                className="w-4 h-4 rounded-full flex-shrink-0"
+                style={{ backgroundColor: isValidHex(customColor) ? customColor : value }}
+              />
+              <span className="text-sm font-medium text-gray-700">Team Name</span>
+              <Badge
+                className="ml-auto text-white text-xs"
+                style={{ backgroundColor: isValidHex(customColor) ? customColor : value }}
+              >
+                Example
+              </Badge>
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export default function TeamsPage() {
-  const [teams, setTeams] = useState<Team[]>([
-    {
-      id: '1',
-      name: 'System Administrators',
-      description: 'System administrators with full access',
-      color: 'purple',
-      memberCount: 0,
-      members: [],
-      permissions: ['view_applications', 'edit_applications', 'review_applications', 'approve_applications', 'manage_users', 'view_analytics'],
-      createdAt: '2025-01-05',
-    },
-    {
-      id: '2',
-      name: 'Operations',
-      description: 'Operations team managing day-to-day applications',
-      color: 'blue',
-      memberCount: 0,
-      members: [],
-      permissions: ['view_applications', 'edit_applications', 'review_applications'],
-      createdAt: '2025-01-10',
-    },
-    {
-      id: '3',
-      name: 'Medical',
-      description: 'Medical team reviewing health-related information',
-      color: 'green',
-      memberCount: 0,
-      members: [],
-      permissions: ['view_applications', 'edit_applications', 'review_applications'],
-      createdAt: '2025-01-10',
-    },
-    {
-      id: '4',
-      name: 'Behavioral Health',
-      description: 'Behavioral health team reviewing mental health information',
-      color: 'orange',
-      memberCount: 0,
-      members: [],
-      permissions: ['view_applications', 'edit_applications', 'review_applications'],
-      createdAt: '2025-01-10',
-    },
-    {
-      id: '5',
-      name: 'LIT',
-      description: 'Leaders in Training team',
-      color: 'pink',
-      memberCount: 0,
-      members: [],
-      permissions: ['view_applications'],
-      createdAt: '2025-01-10',
-    },
-  ]);
+  const { token } = useAuth();
 
-  const [allUsers, setAllUsers] = useState<TeamMember[]>([
-    { id: '1', name: 'John Doe', email: 'john@example.com', role: 'Team Lead' },
-    { id: '2', name: 'Jane Smith', email: 'jane@example.com', role: 'Reviewer' },
-    { id: '3', name: 'Admin User', email: 'admin@example.com', role: 'Super Admin' },
-    { id: '4', name: 'Bob Wilson', email: 'bob@example.com', role: 'Reviewer' },
-    { id: '5', name: 'Alice Brown', email: 'alice@example.com', role: 'Coordinator' },
-  ]);
+  // Data state
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [allStaffUsers, setAllStaffUsers] = useState<UserWithDetails[]>([]); // Admins + Super Admins
+  const [teamMembers, setTeamMembers] = useState<Record<string, UserWithDetails[]>>({});
 
+  // UI state
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isManagingMembers, setIsManagingMembers] = useState(false);
-  const [editingTeam, setEditingTeam] = useState<Partial<Team>>({});
-  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [editingTeam, setEditingTeam] = useState<Partial<Team & { key?: string }>>({});
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [saveMessage, setSaveMessage] = useState('');
 
+  // Fetch teams and staff users (admins + super admins)
+  const fetchData = useCallback(async () => {
+    if (!token) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Fetch teams and all staff users (admins + super admins) in parallel
+      const [teamsData, adminsData, superAdminsData] = await Promise.all([
+        getAllTeams(token),
+        getAllUsers(token, { role: 'admin' }),
+        getAllUsers(token, { role: 'super_admin' })
+      ]);
+
+      // Combine admins and super admins
+      const allStaff = [...adminsData, ...superAdminsData];
+
+      setTeams(teamsData);
+      setAllStaffUsers(allStaff);
+
+      // Group staff by their team
+      const membersByTeam: Record<string, UserWithDetails[]> = {};
+      teamsData.forEach(team => {
+        membersByTeam[team.key] = allStaff.filter(user => user.team === team.key);
+      });
+      setTeamMembers(membersByTeam);
+
+    } catch (err) {
+      console.error('Failed to fetch data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load teams');
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Create new team
   const handleCreateNew = () => {
     setEditingTeam({
+      key: '',
       name: '',
       description: '',
-      color: 'blue',
-      permissions: [],
-      members: [],
+      color: '#3B82F6',
     });
     setIsEditing(true);
   };
 
+  // Edit existing team
   const handleEdit = (team: Team) => {
-    setEditingTeam(team);
+    setEditingTeam({
+      id: team.id,
+      key: team.key,
+      name: team.name,
+      description: team.description || '',
+      color: team.color,
+      is_active: team.is_active,
+      order_index: team.order_index,
+    });
     setIsEditing(true);
   };
 
+  // Open member management dialog
   const handleManageMembers = (team: Team) => {
     setSelectedTeam(team);
-    setSelectedMembers(team.members.map(m => m.id));
+    // Pre-select current team members
+    const currentMembers = teamMembers[team.key] || [];
+    setSelectedMemberIds(currentMembers.map(m => m.id));
     setIsManagingMembers(true);
   };
 
+  // Save team (create or update)
   const handleSave = async () => {
+    if (!token) return;
+
     try {
       setSaving(true);
       setSaveStatus('idle');
 
-      // TODO: Replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
       if (editingTeam.id) {
-        setTeams(prev =>
-          prev.map(t => (t.id === editingTeam.id ? { ...t, ...editingTeam } as Team : t))
-        );
+        // Update existing team
+        await updateTeam(token, editingTeam.id, {
+          name: editingTeam.name,
+          description: editingTeam.description || undefined,
+          color: editingTeam.color,
+          is_active: editingTeam.is_active,
+          order_index: editingTeam.order_index,
+        });
+        setSaveMessage('Team updated successfully!');
       } else {
-        const newTeam = {
-          ...editingTeam,
-          id: Date.now().toString(),
-          memberCount: 0,
-          members: [],
-          createdAt: new Date().toISOString().split('T')[0],
-        } as Team;
-        setTeams(prev => [...prev, newTeam]);
+        // Create new team
+        if (!editingTeam.key || !editingTeam.name) {
+          throw new Error('Team key and name are required');
+        }
+        await createTeam(token, {
+          key: editingTeam.key.toLowerCase().replace(/\s+/g, '_'),
+          name: editingTeam.name,
+          description: editingTeam.description || undefined,
+          color: editingTeam.color,
+        });
+        setSaveMessage('Team created successfully!');
       }
 
       setSaveStatus('success');
       setIsEditing(false);
+
+      // Refresh data
+      await fetchData();
+
       setTimeout(() => setSaveStatus('idle'), 3000);
-    } catch (error) {
-      console.error('Failed to save team:', error);
+    } catch (err) {
+      console.error('Failed to save team:', err);
       setSaveStatus('error');
+      setSaveMessage(err instanceof Error ? err.message : 'Failed to save team');
     } finally {
       setSaving(false);
     }
   };
 
+  // Save member assignments
   const handleSaveMembers = async () => {
-    if (!selectedTeam) return;
+    if (!token || !selectedTeam) return;
 
     try {
       setSaving(true);
       setSaveStatus('idle');
 
-      // TODO: Replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const currentMembers = teamMembers[selectedTeam.key] || [];
+      const currentMemberIds = currentMembers.map(m => m.id);
 
-      const updatedMembers = allUsers.filter(user => selectedMembers.includes(user.id));
+      // Find members to add and remove
+      const toAdd = selectedMemberIds.filter(id => !currentMemberIds.includes(id));
+      const toRemove = currentMemberIds.filter(id => !selectedMemberIds.includes(id));
 
-      setTeams(prev =>
-        prev.map(t =>
-          t.id === selectedTeam.id
-            ? { ...t, members: updatedMembers, memberCount: updatedMembers.length }
-            : t
-        )
-      );
+      // Update each user's team assignment
+      const updates: Promise<UserWithDetails>[] = [];
+
+      // Add new members to this team
+      for (const userId of toAdd) {
+        updates.push(updateUser(token, userId, { team: selectedTeam.key }));
+      }
+
+      // Remove members from this team (set team to empty string which backend treats as null)
+      for (const userId of toRemove) {
+        updates.push(updateUser(token, userId, { team: '' }));
+      }
+
+      await Promise.all(updates);
 
       setSaveStatus('success');
+      setSaveMessage(`Team members updated! Added ${toAdd.length}, removed ${toRemove.length}.`);
       setIsManagingMembers(false);
+
+      // Refresh data
+      await fetchData();
+
       setTimeout(() => setSaveStatus('idle'), 3000);
-    } catch (error) {
-      console.error('Failed to save members:', error);
+    } catch (err) {
+      console.error('Failed to save members:', err);
       setSaveStatus('error');
+      setSaveMessage(err instanceof Error ? err.message : 'Failed to update team members');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this team? This action cannot be undone.')) return;
-
-    try {
-      // TODO: Replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      setTeams(prev => prev.filter(t => t.id !== id));
-    } catch (error) {
-      console.error('Failed to delete team:', error);
-    }
-  };
-
-  const togglePermission = (permission: string) => {
-    setEditingTeam(prev => {
-      const permissions = prev.permissions || [];
-      const hasPermission = permissions.includes(permission);
-
-      return {
-        ...prev,
-        permissions: hasPermission
-          ? permissions.filter(p => p !== permission)
-          : [...permissions, permission],
-      };
-    });
-  };
-
+  // Toggle member selection
   const toggleMember = (userId: string) => {
-    setSelectedMembers(prev =>
+    setSelectedMemberIds(prev =>
       prev.includes(userId)
         ? prev.filter(id => id !== userId)
         : [...prev, userId]
     );
   };
 
-  const getColorClass = (color: string) => {
-    return teamColors.find(c => c.value === color)?.class || 'bg-blue-500';
+  // Get color style for team
+  const getColorStyle = (hexColor: string) => {
+    return { backgroundColor: hexColor };
   };
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-camp-green" />
+        <span className="ml-2 text-gray-600">Loading teams...</span>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+        <Button onClick={fetchData} variant="outline">
+          <RefreshCw className="mr-2 h-4 w-4" />
+          Try Again
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -278,20 +456,26 @@ export default function TeamsPage() {
         <div>
           <h1 className="text-3xl font-bold">Teams</h1>
           <p className="text-muted-foreground mt-1">
-            Organize users into teams and manage permissions
+            Organize admin users into review teams
           </p>
         </div>
-        <Button onClick={handleCreateNew}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Team
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={fetchData}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+          <Button onClick={handleCreateNew}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Team
+          </Button>
+        </div>
       </div>
 
       {saveStatus === 'success' && (
         <Alert className="border-green-200 bg-green-50">
           <CheckCircle2 className="h-4 w-4 text-green-600" />
           <AlertDescription className="text-green-800">
-            Changes saved successfully!
+            {saveMessage}
           </AlertDescription>
         </Alert>
       )}
@@ -299,118 +483,144 @@ export default function TeamsPage() {
       {saveStatus === 'error' && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Failed to save changes. Please try again.
-          </AlertDescription>
+          <AlertDescription>{saveMessage}</AlertDescription>
         </Alert>
       )}
 
+      {/* Teams Grid */}
       <div className="grid gap-4 md:grid-cols-2">
-        {teams.map((team) => (
-          <Card key={team.id}>
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3">
-                  <div className={`w-3 h-3 rounded-full mt-1 ${getColorClass(team.color)}`} />
-                  <div className="space-y-1">
-                    <CardTitle>{team.name}</CardTitle>
-                    <CardDescription>{team.description}</CardDescription>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleEdit(team)}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDelete(team.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Users className="h-4 w-4" />
-                <span>{team.memberCount} members</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleManageMembers(team)}
-                >
-                  <UserPlus className="mr-1 h-3 w-3" />
-                  Manage
-                </Button>
-              </div>
+        {teams.map((team) => {
+          const members = teamMembers[team.key] || [];
 
-              <Separator />
-
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Shield className="h-4 w-4" />
-                  Permissions
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {team.permissions.map((permission) => (
-                    <Badge key={permission} variant="secondary" className="text-xs">
-                      {availablePermissions.find(p => p.value === permission)?.label}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-
-              {team.members.length > 0 && (
-                <>
-                  <Separator />
-                  <div className="space-y-2">
-                    <div className="text-sm font-medium">Members</div>
-                    <div className="flex flex-wrap gap-2">
-                      {team.members.slice(0, 5).map((member) => (
-                        <div
-                          key={member.id}
-                          className="flex items-center gap-2 p-2 rounded-md bg-muted text-sm"
-                        >
-                          <Avatar className="h-6 w-6">
-                            <AvatarFallback className="text-xs">
-                              {member.name.split(' ').map(n => n[0]).join('')}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-xs">{member.name}</span>
-                        </div>
-                      ))}
-                      {team.members.length > 5 && (
-                        <div className="flex items-center justify-center p-2 rounded-md bg-muted text-xs text-muted-foreground">
-                          +{team.members.length - 5} more
-                        </div>
-                      )}
+          return (
+            <Card key={team.id} className={!team.is_active ? 'opacity-60' : ''}>
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className="w-4 h-4 rounded-full mt-1 flex-shrink-0"
+                      style={getColorStyle(team.color)}
+                    />
+                    <div className="space-y-1">
+                      <CardTitle className="flex items-center gap-2">
+                        {team.name}
+                        {!team.is_active && (
+                          <Badge variant="secondary" className="text-xs">Inactive</Badge>
+                        )}
+                      </CardTitle>
+                      <CardDescription>{team.description || 'No description'}</CardDescription>
+                      <div className="text-xs text-muted-foreground">
+                        Key: <code className="bg-muted px-1 py-0.5 rounded">{team.key}</code>
+                      </div>
                     </div>
                   </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEdit(team)}
+                      title="Edit team"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Users className="h-4 w-4" />
+                  <span>{team.admin_count || 0} member{(team.admin_count || 0) !== 1 ? 's' : ''}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleManageMembers(team)}
+                  >
+                    <UserPlus className="mr-1 h-3 w-3" />
+                    Manage
+                  </Button>
+                </div>
+
+                {members.length > 0 && (
+                  <>
+                    <Separator />
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Team Members</div>
+                      <div className="flex flex-wrap gap-2">
+                        {members.slice(0, 5).map((member) => (
+                          <div
+                            key={member.id}
+                            className="flex items-center gap-2 p-2 rounded-md bg-muted text-sm"
+                          >
+                            <Avatar className="h-6 w-6">
+                              <AvatarFallback className="text-xs">
+                                {member.first_name?.[0]}{member.last_name?.[0]}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="text-xs">{member.first_name} {member.last_name}</span>
+                          </div>
+                        ))}
+                        {members.length > 5 && (
+                          <div className="flex items-center justify-center p-2 rounded-md bg-muted text-xs text-muted-foreground">
+                            +{members.length - 5} more
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
+
+      {teams.length === 0 && (
+        <Card className="p-8 text-center">
+          <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+          <h3 className="text-lg font-medium mb-2">No teams configured</h3>
+          <p className="text-muted-foreground mb-4">
+            Create your first team to start organizing admin users.
+          </p>
+          <Button onClick={handleCreateNew}>
+            <Plus className="mr-2 h-4 w-4" />
+            Create Team
+          </Button>
+        </Card>
+      )}
 
       {/* Edit/Create Team Dialog */}
       <Dialog open={isEditing} onOpenChange={setIsEditing}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
               {editingTeam.id ? 'Edit Team' : 'Create New Team'}
             </DialogTitle>
             <DialogDescription>
-              Configure team details and permissions
+              {editingTeam.id
+                ? 'Update team details below.'
+                : 'Enter the details for your new team.'}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
+            {!editingTeam.id && (
+              <div className="space-y-2">
+                <Label htmlFor="team-key">Team Key</Label>
+                <Input
+                  id="team-key"
+                  value={editingTeam.key || ''}
+                  onChange={(e) =>
+                    setEditingTeam(prev => ({ ...prev, key: e.target.value }))
+                  }
+                  placeholder="e.g., ops, medical, behavioral"
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground">
+                  A unique identifier for this team (lowercase, no spaces)
+                </p>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="team-name">Team Name</Label>
               <Input
@@ -419,7 +629,7 @@ export default function TeamsPage() {
                 onChange={(e) =>
                   setEditingTeam(prev => ({ ...prev, name: e.target.value }))
                 }
-                placeholder="e.g., Review Team"
+                placeholder="e.g., Operations Team"
               />
             </div>
 
@@ -432,69 +642,53 @@ export default function TeamsPage() {
                   setEditingTeam(prev => ({ ...prev, description: e.target.value }))
                 }
                 placeholder="Brief description of the team's purpose"
+                rows={3}
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="team-color">Team Color</Label>
-              <Select
-                value={editingTeam.color}
-                onValueChange={(value) =>
-                  setEditingTeam(prev => ({ ...prev, color: value }))
+              <TeamColorPicker
+                value={editingTeam.color || '#3B82F6'}
+                onChange={(color) =>
+                  setEditingTeam(prev => ({ ...prev, color }))
                 }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {teamColors.map((color) => (
-                    <SelectItem key={color.value} value={color.value}>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full ${color.class}`} />
-                        {color.label}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
 
-            <Separator />
-
-            <div className="space-y-3">
-              <Label>Permissions</Label>
-              <div className="space-y-2">
-                {availablePermissions.map((permission) => (
-                  <div
-                    key={permission.value}
-                    className="flex items-center justify-between p-3 rounded-md border cursor-pointer hover:bg-muted/50"
-                    onClick={() => togglePermission(permission.value)}
-                  >
-                    <span className="text-sm">{permission.label}</span>
-                    <input
-                      type="checkbox"
-                      checked={editingTeam.permissions?.includes(permission.value) || false}
-                      onChange={() => togglePermission(permission.value)}
-                      className="h-4 w-4"
-                    />
-                  </div>
-                ))}
+            {editingTeam.id && (
+              <div className="flex items-center space-x-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="team-active"
+                  checked={editingTeam.is_active !== false}
+                  onChange={(e) =>
+                    setEditingTeam(prev => ({ ...prev, is_active: e.target.checked }))
+                  }
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <Label htmlFor="team-active" className="font-normal">
+                  Team is active
+                </Label>
               </div>
-            </div>
+            )}
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditing(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={saving}>
+            <Button
+              onClick={handleSave}
+              disabled={saving || (!editingTeam.id && (!editingTeam.key || !editingTeam.name))}
+            >
               {saving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Saving...
                 </>
               ) : (
-                'Save Team'
+                editingTeam.id ? 'Save Changes' : 'Create Team'
               )}
             </Button>
           </DialogFooter>
@@ -507,39 +701,84 @@ export default function TeamsPage() {
           <DialogHeader>
             <DialogTitle>Manage Team Members</DialogTitle>
             <DialogDescription>
-              Add or remove members from {selectedTeam?.name}
+              Add or remove staff members from <strong>{selectedTeam?.name}</strong>
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3 max-h-[400px] overflow-y-auto">
-            {allUsers.map((user) => (
-              <div
-                key={user.id}
-                className="flex items-center justify-between p-3 rounded-md border cursor-pointer hover:bg-muted/50"
-                onClick={() => toggleMember(user.id)}
-              >
-                <div className="flex items-center gap-3">
-                  <Avatar>
-                    <AvatarFallback>
-                      {user.name.split(' ').map(n => n[0]).join('')}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <div className="font-medium">{user.name}</div>
-                    <div className="text-sm text-muted-foreground flex items-center gap-2">
-                      <Mail className="h-3 w-3" />
-                      {user.email}
-                    </div>
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={selectedMembers.includes(user.id)}
-                  onChange={() => toggleMember(user.id)}
-                  className="h-4 w-4"
-                />
+          <div className="space-y-2">
+            <div className="text-sm text-muted-foreground mb-3">
+              Select the staff members who should be part of this team.
+              Admin and Super Admin users are shown below.
+            </div>
+
+            {allStaffUsers.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>No staff users found.</p>
+                <p className="text-sm">Promote users to Admin or Super Admin role first in User Management.</p>
               </div>
-            ))}
+            ) : (
+              <div className="space-y-2 max-h-[400px] overflow-y-auto border rounded-md p-2">
+                {allStaffUsers.map((user) => {
+                  const isSelected = selectedMemberIds.includes(user.id);
+                  const isOnAnotherTeam = user.team && user.team !== selectedTeam?.key;
+
+                  return (
+                    <div
+                      key={user.id}
+                      className={`flex items-center justify-between p-3 rounded-md border cursor-pointer transition-colors
+                        ${isSelected ? 'bg-camp-green/10 border-camp-green' : 'hover:bg-muted/50'}
+                        ${isOnAnotherTeam ? 'opacity-60' : ''}`}
+                      onClick={() => toggleMember(user.id)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Avatar>
+                          <AvatarFallback>
+                            {user.first_name?.[0]}{user.last_name?.[0]}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="font-medium flex items-center gap-2">
+                            {user.first_name} {user.last_name}
+                            {user.role === 'super_admin' && (
+                              <span
+                                className="text-[10px] px-1.5 py-0.5 font-semibold rounded tracking-wide uppercase border whitespace-nowrap"
+                                style={{
+                                  background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)',
+                                  color: '#92400E',
+                                  borderColor: '#F59E0B',
+                                }}
+                              >
+                                Super Admin
+                              </span>
+                            )}
+                            {isOnAnotherTeam && (
+                              <Badge variant="outline" className="text-xs">
+                                Currently: {user.team}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-sm text-muted-foreground flex items-center gap-2">
+                            <Mail className="h-3 w-3" />
+                            {user.email}
+                          </div>
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleMember(user.id)}
+                        className="h-5 w-5 rounded border-gray-300 text-camp-green focus:ring-camp-green"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="text-sm text-muted-foreground">
+            {selectedMemberIds.length} member{selectedMemberIds.length !== 1 ? 's' : ''} selected
           </div>
 
           <DialogFooter>

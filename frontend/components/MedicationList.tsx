@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, Check } from 'lucide-react';
 
 export interface MedicationDose {
   id?: string;
   given_type: string;
-  time: string;
+  time: string;  // Stores time in HH:MM format (12-hour without AM/PM)
+  time_period?: string;  // Stores 'AM' or 'PM'
   notes: string;
   order_index: number;
 }
@@ -38,6 +39,8 @@ interface MedicationListProps {
   medicationFields?: FieldConfig[];
   doseFields?: FieldConfig[];
   isRequired?: boolean;
+  noMedications?: boolean;
+  onNoMedicationsChange?: (value: boolean) => void;
 }
 
 const DEFAULT_MEDICATION_FIELDS: FieldConfig[] = [
@@ -61,9 +64,44 @@ const DEFAULT_DOSE_FIELDS: FieldConfig[] = [
     required: true,
     options: ['At specific time', 'As needed']
   },
-  { name: 'time', label: 'Time', type: 'text', required: false, placeholder: 'HH:MM (e.g., 08:00, 14:30) or N/A' },
+  { name: 'time', label: 'Time', type: 'text', required: false, placeholder: '12:00' },
   { name: 'notes', label: 'Notes', type: 'textarea', required: false, placeholder: 'Additional instructions...' }
 ];
+
+// Helper functions for time conversion
+const convert24To12Hour = (time24: string): { time12: string; period: string } => {
+  if (!time24 || time24 === 'N/A') return { time12: '', period: 'AM' };
+
+  const [hoursStr, minutes] = time24.split(':');
+  if (!minutes) return { time12: time24, period: 'AM' };
+
+  let hours = parseInt(hoursStr);
+  if (isNaN(hours)) return { time12: time24, period: 'AM' };
+
+  const period = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  if (hours === 0) hours = 12;
+
+  return { time12: `${hours}:${minutes}`, period };
+};
+
+const convert12To24Hour = (time12: string, period: string): string => {
+  if (!time12 || time12 === 'N/A') return '';
+
+  const [hoursStr, minutes] = time12.split(':');
+  if (!minutes) return time12;
+
+  let hours = parseInt(hoursStr);
+  if (isNaN(hours)) return time12;
+
+  if (period === 'PM' && hours !== 12) {
+    hours += 12;
+  } else if (period === 'AM' && hours === 12) {
+    hours = 0;
+  }
+
+  return `${hours.toString().padStart(2, '0')}:${minutes}`;
+};
 
 export default function MedicationList({
   questionId,
@@ -72,19 +110,56 @@ export default function MedicationList({
   onChange,
   medicationFields = DEFAULT_MEDICATION_FIELDS,
   doseFields = DEFAULT_DOSE_FIELDS,
-  isRequired = false
+  isRequired = false,
+  noMedications = false,
+  onNoMedicationsChange
 }: MedicationListProps) {
-  const [medications, setMedications] = useState<Medication[]>(value || []);
+  const [medications, setMedications] = useState<Medication[]>(() => {
+    // Initialize with converted 12-hour format times
+    const convertedMeds = (value || []).map(med => ({
+      ...med,
+      doses: (med.doses || []).map(dose => {
+        // If time_period is not set, try to convert from 24-hour format
+        if (!dose.time_period && dose.time) {
+          const { time12, period } = convert24To12Hour(dose.time);
+          return {
+            ...dose,
+            time: time12,
+            time_period: period
+          };
+        }
+        return dose;
+      })
+    }));
+    return convertedMeds;
+  });
   const [expandedMedications, setExpandedMedications] = useState<Set<number>>(new Set());
+  const [savedMedications, setSavedMedications] = useState<Set<number>>(new Set());
 
-  // Sync with parent when medications change
+  // Sync with parent value changes and convert times to 12-hour format
+  // Only update if the value prop has actually changed from external source
   useEffect(() => {
-    onChange(medications);
-  }, [medications]);
+    // Skip if value hasn't changed or is the same as current medications
+    if (!value || JSON.stringify(value) === JSON.stringify(medications)) {
+      return;
+    }
 
-  // Sync with parent value changes
-  useEffect(() => {
-    setMedications(value || []);
+    const convertedMeds = (value || []).map(med => ({
+      ...med,
+      doses: (med.doses || []).map(dose => {
+        // If time_period is not set, try to convert from 24-hour format
+        if (!dose.time_period && dose.time) {
+          const { time12, period } = convert24To12Hour(dose.time);
+          return {
+            ...dose,
+            time: time12,
+            time_period: period
+          };
+        }
+        return dose;
+      })
+    }));
+    setMedications(convertedMeds);
   }, [value]);
 
   const addMedication = () => {
@@ -98,6 +173,7 @@ export default function MedicationList({
     };
     const updated = [...medications, newMedication];
     setMedications(updated);
+    onChange(updated);  // Notify parent of change
     // Auto-expand the new medication
     setExpandedMedications(new Set([...expandedMedications, medications.length]));
   };
@@ -109,6 +185,7 @@ export default function MedicationList({
       med.order_index = i;
     });
     setMedications(updated);
+    onChange(updated);  // Notify parent of change
     // Remove from expanded set
     const newExpanded = new Set(expandedMedications);
     newExpanded.delete(index);
@@ -119,6 +196,7 @@ export default function MedicationList({
     const updated = [...medications];
     updated[index] = { ...updated[index], [field]: value };
     setMedications(updated);
+    onChange(updated);  // Notify parent of change
   };
 
   const addDose = (medicationIndex: number) => {
@@ -126,11 +204,13 @@ export default function MedicationList({
     const newDose: MedicationDose = {
       given_type: '',
       time: '',
+      time_period: 'AM',  // Default to AM
       notes: '',
       order_index: updated[medicationIndex].doses.length
     };
     updated[medicationIndex].doses.push(newDose);
     setMedications(updated);
+    onChange(updated);  // Notify parent of change
   };
 
   const removeDose = (medicationIndex: number, doseIndex: number) => {
@@ -141,15 +221,17 @@ export default function MedicationList({
       dose.order_index = i;
     });
     setMedications(updated);
+    onChange(updated);  // Notify parent of change
   };
 
-  const updateDose = (medicationIndex: number, doseIndex: number, field: keyof MedicationDose, value: string) => {
+  const updateDose = (medicationIndex: number, doseIndex: number, field: string, value: string) => {
     const updated = [...medications];
     updated[medicationIndex].doses[doseIndex] = {
       ...updated[medicationIndex].doses[doseIndex],
       [field]: value
     };
     setMedications(updated);
+    onChange(updated);  // Notify parent of change
   };
 
   const toggleExpanded = (index: number) => {
@@ -162,10 +244,25 @@ export default function MedicationList({
     setExpandedMedications(newExpanded);
   };
 
+  const saveMedication = (index: number) => {
+    // Trigger parent onChange to ensure save
+    onChange(medications);
+    // Show saved indicator
+    setSavedMedications(prev => new Set([...prev, index]));
+    // Clear saved indicator after 2 seconds
+    setTimeout(() => {
+      setSavedMedications(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(index);
+        return newSet;
+      });
+    }, 2000);
+  };
+
   const validateTimeFormat = (time: string): boolean => {
     if (!time || time.trim() === '' || time.toUpperCase() === 'N/A') return true;
-    // Validate HH:MM format (00:00 to 23:59)
-    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    // Validate 12-hour format HH:MM (1:00 to 12:59)
+    const timeRegex = /^(0?[1-9]|1[0-2]):[0-5][0-9]$/;
     return timeRegex.test(time);
   };
 
@@ -206,51 +303,65 @@ export default function MedicationList({
       );
     }
 
-    // Special validation for time field
-    const isTimeField = field.name === 'time';
-    const isInvalidTime = isTimeField && value && !validateTimeFormat(value);
-
     return (
-      <div>
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={field.placeholder}
-          className={`${baseClasses} ${isInvalidTime ? 'border-red-500' : ''}`}
-          required={field.required}
-        />
-        {isInvalidTime && (
-          <p className="text-xs text-red-600 mt-1">
-            Please use HH:MM format (e.g., 08:00, 14:30) or enter "N/A"
-          </p>
-        )}
-      </div>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={field.placeholder}
+        className={baseClasses}
+        required={field.required}
+      />
     );
   };
 
   return (
     <div className="space-y-4">
+      {/* No Medications Checkbox */}
+      {onNoMedicationsChange && (
+        <label className="flex items-center gap-3 p-4 bg-gray-50 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+          <input
+            type="checkbox"
+            checked={noMedications}
+            onChange={(e) => {
+              onNoMedicationsChange(e.target.checked);
+              if (e.target.checked) {
+                // Clear medications when "no medications" is checked
+                setMedications([]);
+                onChange([]);
+              }
+            }}
+            className="w-5 h-5 text-camp-green border-2 border-gray-300 rounded focus:ring-camp-green focus:ring-2"
+          />
+          <span className="text-sm font-medium text-gray-700">
+            This camper does not take any medications
+          </span>
+        </label>
+      )}
+
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-gray-600">
-          {medications.length === 0 ? (
-            <span>No medications added yet</span>
-          ) : (
-            <span>{medications.length} medication{medications.length !== 1 ? 's' : ''} listed</span>
-          )}
+      {!noMedications && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-gray-600">
+            {medications.length === 0 ? (
+              <span>No medications added yet</span>
+            ) : (
+              <span>{medications.length} medication{medications.length !== 1 ? 's' : ''} listed</span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={addMedication}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-camp-green rounded-lg hover:bg-camp-green/90 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Add Medication
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={addMedication}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-camp-green rounded-lg hover:bg-camp-green/90 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Add Medication
-        </button>
-      </div>
+      )}
 
       {/* Medications List */}
+      {!noMedications && (
       <div className="space-y-4">
         {medications.map((medication, medIndex) => (
           <div key={medIndex} className="border-2 border-gray-300 rounded-lg overflow-hidden">
@@ -325,17 +436,22 @@ export default function MedicationList({
                     <button
                       type="button"
                       onClick={() => addDose(medIndex)}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-camp-green border-2 border-camp-green rounded-lg hover:bg-camp-green hover:text-white transition-colors"
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                        medication.doses.length === 0
+                          ? 'bg-camp-green text-white hover:bg-camp-green/90 shadow-sm'
+                          : 'text-camp-green border-2 border-camp-green hover:bg-camp-green hover:text-white'
+                      }`}
                     >
-                      <Plus className="h-3 w-3" />
+                      <Plus className="h-4 w-4" />
                       Add Dose
                     </button>
                   </div>
 
                   {/* Doses Table */}
                   {medication.doses.length === 0 ? (
-                    <div className="text-center py-6 text-sm text-gray-500 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-                      No doses scheduled. Click "Add Dose" to add a dose schedule.
+                    <div className="text-center py-6 text-sm bg-red-50 rounded-lg border-2 border-dashed border-red-300">
+                      <p className="text-red-600 font-medium">At least one dose schedule is required</p>
+                      <p className="text-red-500 text-xs mt-1">Click "Add Dose" to add a dose schedule</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -359,44 +475,155 @@ export default function MedicationList({
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            {doseFields.map((field) => (
-                              <div key={field.name} className={field.name === 'notes' ? 'md:col-span-3' : ''}>
-                                <label className="block text-xs font-medium text-blue-900 mb-1">
-                                  {field.label}
-                                  {field.required && <span className="text-red-500 ml-1">*</span>}
-                                </label>
-                                {renderFieldInput(
-                                  field,
-                                  (dose as any)[field.name] || '',
-                                  (value) => updateDose(medIndex, doseIndex, field.name as keyof MedicationDose, value),
-                                  `dose-${medIndex}-${doseIndex}-${field.name}`
-                                )}
-                              </div>
-                            ))}
+                            {doseFields.map((field) => {
+                              // Special rendering for time field - supports both dropdown and text+AM/PM modes
+                              if (field.name === 'time') {
+                                // If time field is configured as dropdown with options, render as simple dropdown
+                                if (field.type === 'dropdown' && field.options && field.options.length > 0) {
+                                  return (
+                                    <div key={field.name}>
+                                      <label className="block text-xs font-medium text-blue-900 mb-1">
+                                        {field.label}
+                                        {field.required && <span className="text-red-500 ml-1">*</span>}
+                                      </label>
+                                      <select
+                                        value={dose.time || ''}
+                                        onChange={(e) => updateDose(medIndex, doseIndex, 'time', e.target.value)}
+                                        className="w-full px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:border-camp-green focus:ring-2 focus:ring-camp-green/20 transition-colors"
+                                        disabled={dose.given_type === 'As needed'}
+                                        required={field.required}
+                                      >
+                                        <option value="">Select {field.label}</option>
+                                        {field.options.map((option, i) => (
+                                          <option key={i} value={option}>{option}</option>
+                                        ))}
+                                      </select>
+                                      {dose.given_type === 'As needed' && (
+                                        <p className="text-xs text-gray-500 mt-1">N/A for as-needed doses</p>
+                                      )}
+                                    </div>
+                                  );
+                                }
+
+                                // Default: render as text input with AM/PM dropdown (legacy behavior)
+                                return (
+                                  <div key={field.name}>
+                                    <label className="block text-xs font-medium text-blue-900 mb-1">
+                                      {field.label}
+                                      {field.required && <span className="text-red-500 ml-1">*</span>}
+                                    </label>
+                                    <div className="flex gap-2">
+                                      <input
+                                        type="text"
+                                        value={dose.time || ''}
+                                        onChange={(e) => updateDose(medIndex, doseIndex, 'time', e.target.value)}
+                                        placeholder="8:00"
+                                        className={`flex-1 px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:border-camp-green focus:ring-2 focus:ring-camp-green/20 transition-colors ${
+                                          dose.time && !validateTimeFormat(dose.time) ? 'border-red-500' : ''
+                                        }`}
+                                        disabled={dose.given_type === 'As needed'}
+                                      />
+                                      <select
+                                        value={dose.time_period || 'AM'}
+                                        onChange={(e) => updateDose(medIndex, doseIndex, 'time_period', e.target.value)}
+                                        className="px-3 py-2 text-sm border-2 border-gray-300 rounded-lg focus:border-camp-green focus:ring-2 focus:ring-camp-green/20 transition-colors"
+                                        disabled={dose.given_type === 'As needed'}
+                                      >
+                                        <option value="AM">AM</option>
+                                        <option value="PM">PM</option>
+                                      </select>
+                                    </div>
+                                    {dose.time && !validateTimeFormat(dose.time) && (
+                                      <p className="text-xs text-red-600 mt-1">
+                                        Please use HH:MM format (e.g., 8:00, 12:30)
+                                      </p>
+                                    )}
+                                    {dose.given_type === 'As needed' && (
+                                      <p className="text-xs text-gray-500 mt-1">N/A for as-needed doses</p>
+                                    )}
+                                  </div>
+                                );
+                              }
+
+                              // Regular rendering for other fields
+                              return (
+                                <div key={field.name} className={field.name === 'notes' ? 'md:col-span-3' : ''}>
+                                  <label className="block text-xs font-medium text-blue-900 mb-1">
+                                    {field.label}
+                                    {field.required && <span className="text-red-500 ml-1">*</span>}
+                                  </label>
+                                  {renderFieldInput(
+                                    field,
+                                    (dose as any)[field.name] || '',
+                                    (value) => updateDose(medIndex, doseIndex, field.name, value),
+                                    `dose-${medIndex}-${doseIndex}-${field.name}`
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
+
+                {/* Save Medication Button */}
+                <div className="mt-6 pt-4 border-t border-gray-200 flex items-center justify-between">
+                  {medication.doses.length === 0 && (
+                    <p className="text-sm text-red-600">
+                      ⚠ Add at least one dose schedule to complete this medication
+                    </p>
+                  )}
+                  <div className={medication.doses.length === 0 ? '' : 'ml-auto'}>
+                    <button
+                      type="button"
+                      onClick={() => saveMedication(medIndex)}
+                      disabled={savedMedications.has(medIndex)}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                        savedMedications.has(medIndex)
+                          ? 'bg-green-100 text-green-700 cursor-default'
+                          : 'bg-camp-green text-white hover:bg-camp-green/90'
+                      }`}
+                    >
+                      {savedMedications.has(medIndex) ? (
+                        <>
+                          <Check className="h-4 w-4" />
+                          Saved!
+                        </>
+                      ) : (
+                        'Save Medication'
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
         ))}
       </div>
+      )}
 
-      {/* Empty State - Only show when there are no medications */}
-      {medications.length === 0 && (
+      {/* Empty State - Only show when there are no medications and "no meds" is not checked */}
+      {!noMedications && medications.length === 0 && (
         <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
           <p className="text-gray-600 mb-4">No medications listed</p>
           <p className="text-sm text-gray-500 mb-4">Click the button above to add your first medication</p>
         </div>
       )}
 
-      {/* Required Field Notice */}
-      {isRequired && medications.length === 0 && (
+      {/* Confirmed No Medications State */}
+      {noMedications && (
+        <div className="text-center py-8 border-2 border-green-200 rounded-lg bg-green-50">
+          <p className="text-green-700 font-medium">✓ Confirmed: No medications</p>
+          <p className="text-sm text-green-600 mt-1">This camper does not take any medications</p>
+        </div>
+      )}
+
+      {/* Required Field Notice - not shown if "no medications" is checked */}
+      {isRequired && !noMedications && medications.length === 0 && (
         <p className="text-sm text-red-600">
-          * At least one medication is required
+          * At least one medication is required, or check "no medications" above
         </p>
       )}
     </div>

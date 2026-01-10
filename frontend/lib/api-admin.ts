@@ -19,15 +19,36 @@ export interface ApplicationWithUser {
   user?: UserInfo
   camper_first_name?: string
   camper_last_name?: string
-  status: string
+  status: string  // applicant, camper, inactive
+  sub_status: string  // not_started, incomplete, completed, under_review, waitlist, complete, deferred, withdrawn, rejected
   completion_percentage: number
   is_returning_camper: boolean
   cabin_assignment?: string
+  // Camper metadata
+  camper_age?: number
+  camper_gender?: string
+  tuition_status?: string
+  // Payment tracking
+  paid_invoice?: boolean | null  // NULL=no invoice, false=unpaid, true=paid
+  stripe_invoice_id?: string | null
+  // FASD BeST Score - auto-calculated from FASD Screener responses
+  fasd_best_score?: number | null  // NULL if not all questions answered
+  // Timestamps
   created_at: string
   updated_at: string
-  completed_at?: string  // When application reached 100%
+  completed_at?: string  // When applicant reached 100%
+  under_review_at?: string  // When first admin action received
+  promoted_to_camper_at?: string  // When promoted to camper status
+  waitlisted_at?: string  // When moved to waitlist
+  deferred_at?: string  // When deferred
+  withdrawn_at?: string  // When withdrawn
+  rejected_at?: string  // When rejected
+  paid_at?: string  // When payment received
+  // Admin info
   approval_count?: number
+  decline_count?: number
   approved_by_teams?: string[]
+  note_count?: number
   responses?: Array<{
     id: string
     question_id: string
@@ -134,6 +155,28 @@ export async function getApplicationProgressAdmin(
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
     throw new Error(error.detail || 'Failed to fetch application progress')
+  }
+
+  return response.json()
+}
+
+/**
+ * Get application sections (admin only)
+ * Unlike the regular endpoint, this doesn't filter by user ownership
+ */
+export async function getApplicationSectionsAdmin(
+  token: string,
+  applicationId: string
+): Promise<import('./api-applications').ApplicationSection[]> {
+  const response = await fetch(`${API_URL}/api/applications/admin/sections?application_id=${applicationId}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.detail || 'Failed to fetch application sections')
   }
 
   return response.json()

@@ -248,7 +248,7 @@ Quick overview:
 
 ## Support
 
-For issues or questions, contact: [support@campfasd.org](mailto:support@campfasd.org)
+For issues or questions, contact: [camp@fasdcamp.org](mailto:camp@fasdcamp.org)
 
 ## License
 

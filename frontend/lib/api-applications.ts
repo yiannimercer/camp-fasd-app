@@ -5,6 +5,17 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 // Types
+// Section header for grouping questions within a section
+export interface SectionHeader {
+  id: string
+  section_id: string
+  header_text: string
+  order_index: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface ApplicationSection {
   id: string
   title: string
@@ -12,9 +23,12 @@ export interface ApplicationSection {
   order_index: number
   is_active: boolean
   visible_before_acceptance: boolean
+  required_status: string | null   // NULL=all, 'applicant'=applicant only, 'camper'=camper only
+  score_calculation_type: string | null  // e.g., 'fasd_best' for FASD BeST score calculation
   created_at: string
   updated_at: string
   questions: ApplicationQuestion[]
+  headers: SectionHeader[]  // Section sub-headers for grouping questions
 }
 
 export interface ApplicationQuestion {
@@ -46,13 +60,27 @@ export interface Application {
   user_id: string
   camper_first_name: string | null
   camper_last_name: string | null
-  status: string
+  status: string  // applicant, camper, inactive
+  sub_status: string  // not_started, incomplete, completed, under_review, waitlist, complete, deferred, withdrawn, rejected
   completion_percentage: number
   is_returning_camper: boolean
   cabin_assignment: string | null
+  // Payment tracking
+  paid_invoice: boolean | null  // NULL=no invoice, false=unpaid, true=paid
+  stripe_invoice_id: string | null
+  // Profile photo (pre-signed URL for camper photo if uploaded)
+  profile_photo_url: string | null
+  // Timestamps
   created_at: string
   updated_at: string
   completed_at: string | null  // When application reached 100%
+  under_review_at: string | null  // When first admin action received
+  promoted_to_camper_at: string | null  // When promoted to camper status
+  waitlisted_at: string | null
+  deferred_at: string | null
+  withdrawn_at: string | null
+  rejected_at: string | null
+  paid_at: string | null
 }
 
 export interface ApplicationResponse {
@@ -212,6 +240,59 @@ export async function getApplicationProgress(
 
   if (!response.ok) {
     throw new Error('Failed to fetch application progress')
+  }
+
+  return response.json()
+}
+
+/**
+ * Reactivate a deactivated application
+ * Sets status back to 'applicant' and determines appropriate sub_status
+ * based on current response state (not_started, incomplete, or complete)
+ */
+export async function reactivateApplication(
+  token: string,
+  applicationId: string
+): Promise<Application> {
+  const response = await fetch(`${API_URL}/api/applications/${applicationId}/reactivate`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to reactivate application')
+  }
+
+  return response.json()
+}
+
+/**
+ * Withdraw an application (family-initiated)
+ * Sets status to inactive with sub_status 'withdrawn'
+ */
+export async function withdrawApplication(
+  token: string,
+  applicationId: string
+): Promise<{
+  message: string
+  application_id: string
+  status: string
+  sub_status: string
+  withdrawn_at: string
+}> {
+  const response = await fetch(`${API_URL}/api/applications/${applicationId}/withdraw`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to withdraw application')
   }
 
   return response.json()

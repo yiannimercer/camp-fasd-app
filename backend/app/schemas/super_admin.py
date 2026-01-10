@@ -87,6 +87,9 @@ class EmailTemplateBase(BaseModel):
     subject: str
     html_content: str
     text_content: Optional[str] = None
+    markdown_content: Optional[str] = None  # Raw markdown source
+    use_markdown: bool = False  # Use markdown instead of html_content
+    trigger_event: Optional[str] = None  # e.g., 'application_created', 'application_submitted', etc.
     variables: Optional[List[str]] = None
     is_active: bool = True
 
@@ -100,6 +103,9 @@ class EmailTemplateUpdate(BaseModel):
     subject: Optional[str] = None
     html_content: Optional[str] = None
     text_content: Optional[str] = None
+    markdown_content: Optional[str] = None  # Raw markdown source
+    use_markdown: Optional[bool] = None  # Use markdown instead of html_content
+    trigger_event: Optional[str] = None
     variables: Optional[List[str]] = None
     is_active: Optional[bool] = None
 
@@ -109,6 +115,58 @@ class EmailTemplate(EmailTemplateBase):
     created_at: datetime
     updated_at: datetime
     updated_by: Optional[UUID4] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ============================================================================
+# Email Automation Schemas
+# ============================================================================
+
+class EmailAutomationBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    template_key: str
+    trigger_type: str  # 'event' or 'scheduled'
+    trigger_event: Optional[str] = None  # For event-based triggers
+    schedule_day: Optional[int] = None  # 0-6 (Sunday-Saturday)
+    schedule_hour: Optional[int] = None  # 0-23
+    audience_filter: Optional[Dict[str, Any]] = None  # JSON filter for recipients
+    is_active: bool = True
+
+
+class EmailAutomationCreate(EmailAutomationBase):
+    pass
+
+
+class EmailAutomationUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    template_key: Optional[str] = None
+    trigger_type: Optional[str] = None
+    trigger_event: Optional[str] = None
+    schedule_day: Optional[int] = None
+    schedule_hour: Optional[int] = None
+    audience_filter: Optional[Dict[str, Any]] = None
+    is_active: Optional[bool] = None
+
+
+class EmailAutomation(EmailAutomationBase):
+    id: UUID4
+    created_at: datetime
+    updated_at: datetime
+    created_by: Optional[UUID4] = None
+    updated_by: Optional[UUID4] = None
+
+    class Config:
+        from_attributes = True
+
+
+class EmailAutomationWithTemplate(EmailAutomation):
+    """Email automation with template details"""
+    template_name: Optional[str] = None
+    template_subject: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -169,6 +227,7 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None  # 'user', 'admin', 'super_admin'
     team: Optional[str] = None  # For admins
     status: Optional[str] = None  # 'active', 'inactive', 'suspended'
+    receive_emails: Optional[bool] = None  # Opt-out of automated emails
 
 
 class UserStatusUpdate(BaseModel):
@@ -189,30 +248,82 @@ class PasswordResetRequest(BaseModel):
     send_email: bool = True
 
 
+class CreateUserRequest(BaseModel):
+    """Create a new user (super admin creates user with invitation)"""
+    email: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    role: str = 'user'  # 'user', 'admin', 'super_admin'
+    team: Optional[str] = None  # Required if role = 'admin'
+    phone: Optional[str] = None
+    send_invitation: bool = True
+
+
+class DirectEmailRequest(BaseModel):
+    """Send a direct email to a user"""
+    subject: str
+    message: str  # Plain text message (will be wrapped in branded template)
+    include_greeting: bool = True  # Include "Dear [Name]," greeting
+
+
+class UserActionResult(BaseModel):
+    """Result of a user management action"""
+    success: bool
+    message: str
+    user_id: Optional[UUID4] = None
+    error: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+
+
+class UserDeletionResult(BaseModel):
+    """Result of user deletion with cascade information"""
+    success: bool
+    message: str
+    summary: Dict[str, Any]
+    error: Optional[str] = None
+
+
 # ============================================================================
 # Dashboard Statistics Schemas
 # ============================================================================
 
 class DashboardStats(BaseModel):
     """Super admin dashboard statistics"""
+    # User counts
     total_users: int
-    total_families: int
-    total_admins: int
-    total_super_admins: int
+    total_families: int  # role='user'
+    total_admins: int  # role='admin'
+    total_super_admins: int  # role='super_admin'
     new_users_this_week: int
 
+    # Application totals
     total_applications: int
     applications_this_season: int
-    applications_in_progress: int
-    applications_under_review: int
-    applications_accepted: int
-    applications_paid: int
-    applications_declined: int
 
+    # Applicant stages (status='applicant')
+    applicant_not_started: int  # sub_status='not_started'
+    applicant_incomplete: int  # sub_status='incomplete'
+    applicant_complete: int  # sub_status='complete'
+    applicant_under_review: int  # sub_status='under_review'
+    applicant_waitlisted: int  # sub_status='waitlisted'
+
+    # Camper stages (status='camper')
+    camper_total: int  # All campers
+    camper_incomplete: int  # sub_status='incomplete' (forms pending)
+    camper_complete: int  # sub_status='complete' (all forms done)
+    camper_unpaid: int  # paid_invoice=False
+    camper_paid: int  # paid_invoice=True
+
+    # Inactive stages (status='inactive')
+    inactive_withdrawn: int  # sub_status='withdrawn'
+    inactive_deferred: int  # sub_status='deferred'
+    inactive_deactivated: int  # sub_status='inactive'
+
+    # Revenue (placeholder for now)
     total_revenue: float
     season_revenue: float
-    outstanding_payments: int
 
+    # Performance metrics
     avg_completion_days: Optional[float] = None
     avg_review_days: Optional[float] = None
 
@@ -251,3 +362,36 @@ class BulkActionResult(BaseModel):
     failure_count: int
     total_count: int
     failures: List[Dict[str, Any]] = []  # List of failed items with reasons
+
+
+# ============================================================================
+# Annual Reset Schemas
+# ============================================================================
+
+class AnnualResetRequest(BaseModel):
+    """Request for annual reset operation"""
+    dry_run: bool = True  # If true, only report what would happen without making changes
+    exclude_paid: bool = False  # If true, skip paid applications (default: reset paid apps since they're returning campers)
+    archive_year: Optional[int] = None  # Year to archive data as (defaults to current year)
+
+
+class AnnualResetApplicationResult(BaseModel):
+    """Result for a single application in the annual reset"""
+    application_id: UUID4
+    camper_name: str
+    previous_status: str
+    responses_deleted: int
+    responses_preserved: int
+    notes_deleted: int
+
+
+class AnnualResetResult(BaseModel):
+    """Result of annual reset operation"""
+    dry_run: bool
+    archive_year: int
+    total_applications_processed: int
+    total_responses_deleted: int
+    total_responses_preserved: int
+    total_notes_deleted: int
+    applications_reset: List[AnnualResetApplicationResult]
+    skipped_statuses: Dict[str, int]  # Count of applications skipped by status

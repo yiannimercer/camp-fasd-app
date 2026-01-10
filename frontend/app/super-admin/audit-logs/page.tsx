@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -37,10 +37,14 @@ import {
   CheckCircle,
   Info,
   XCircle,
-  Loader2
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
+import { useAuth } from '@/lib/contexts/AuthContext';
+import { getAuditLogs, AuditLog as ApiAuditLog } from '@/lib/api-super-admin';
 
-interface AuditLog {
+// Frontend display type with mapped fields
+interface DisplayAuditLog {
   id: string;
   timestamp: string;
   userId: string;
@@ -50,8 +54,149 @@ interface AuditLog {
   category: 'user' | 'application' | 'system' | 'email' | 'security';
   severity: 'info' | 'warning' | 'error' | 'success';
   details: string;
-  metadata?: Record<string, any>;
-  ipAddress?: string;
+  metadata: Record<string, any>;
+  ipAddress: string;
+}
+
+// Maps entity_type to category
+function mapEntityTypeToCategory(entityType: string): DisplayAuditLog['category'] {
+  const mapping: Record<string, DisplayAuditLog['category']> = {
+    'user': 'user',
+    'application': 'application',
+    'system': 'system',
+    'configuration': 'system',
+    'email': 'email',
+    'email_template': 'email',
+    'security': 'security',
+    'team': 'system',
+  };
+  return mapping[entityType] || 'system';
+}
+
+// Derives severity from action type
+function deriveSeverityFromAction(action: string): DisplayAuditLog['severity'] {
+  // Success actions
+  if (['login_success', 'user_created', 'status_promoted', 'team_approved', 'application_created'].includes(action)) {
+    return 'success';
+  }
+  // Warning actions
+  if (['login_failed', 'status_waitlisted', 'status_deferred', 'status_withdrawn', 'team_declined'].includes(action)) {
+    return 'warning';
+  }
+  // Error actions
+  if (['status_rejected', 'error'].includes(action)) {
+    return 'error';
+  }
+  // Default to info
+  return 'info';
+}
+
+// Formats action to human-readable text
+function formatAction(action: string, details: Record<string, any> | null): string {
+  const actionLabels: Record<string, string> = {
+    'login_success': 'Logged in successfully',
+    'login_failed': 'Failed login attempt',
+    'user_created': 'New user registered',
+    'user_updated': 'Updated user information',
+    'role_changed': 'Changed user role',
+    'status_changed': 'Changed user status',
+    'application_created': 'Created new application',
+    'application_updated': 'Updated application',
+    'responses_saved': 'Saved application responses',
+    'status_promoted': 'Promoted to Camper',
+    'status_waitlisted': 'Added to waitlist',
+    'status_deferred': 'Deferred application',
+    'status_withdrawn': 'Withdrew application',
+    'status_rejected': 'Rejected application',
+    'status_reactivated': 'Reactivated application',
+    'team_approved': 'Approved application',
+    'team_declined': 'Declined application',
+    'note_added': 'Added admin note',
+    'note_deleted': 'Deleted admin note',
+    'cabin_assigned': 'Assigned cabin',
+    'password_changed': 'Changed password',
+    'password_reset': 'Reset password',
+    'config_updated': 'Updated system configuration',
+    'template_updated': 'Updated email template',
+    'team_created': 'Created new team',
+    'team_updated': 'Updated team',
+    'annual_reset': 'Performed annual reset',
+    'updated': 'Updated record',
+    'created': 'Created record',
+  };
+
+  return actionLabels[action] || action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// Formats details object to human-readable description
+function formatDetails(action: string, details: Record<string, any> | null): string {
+  if (!details) return '';
+
+  const parts: string[] = [];
+
+  // Handle camper name for application events
+  if (details.camper_name && details.camper_name.trim()) {
+    parts.push(`Camper: ${details.camper_name}`);
+  }
+
+  // Handle team for approval/decline
+  if (details.team) {
+    parts.push(`Team: ${details.team}`);
+  }
+
+  // Handle role changes
+  if (details.old_role && details.new_role) {
+    parts.push(`Role changed from ${details.old_role} to ${details.new_role}`);
+  }
+
+  // Handle status changes
+  if (details.old_status && details.new_status) {
+    parts.push(`Status changed from ${details.old_status} to ${details.new_status}`);
+  }
+
+  // Handle login failures
+  if (details.reason) {
+    parts.push(`Reason: ${details.reason.replace(/_/g, ' ')}`);
+  }
+
+  // Handle email
+  if (details.email && action.includes('login')) {
+    parts.push(`Email: ${details.email}`);
+  }
+
+  // Handle configuration updates
+  if (details.key) {
+    parts.push(`Key: ${details.key}`);
+  }
+
+  // Handle annual reset
+  if (details.applications_reset !== undefined) {
+    parts.push(`${details.applications_reset} applications reset`);
+  }
+
+  // Handle note previews
+  if (details.note_preview) {
+    parts.push(`"${details.note_preview}"`);
+  }
+
+  return parts.join(' • ') || JSON.stringify(details).slice(0, 100);
+}
+
+// Converts API audit log to display format
+function mapToDisplayLog(log: ApiAuditLog): DisplayAuditLog {
+  return {
+    id: log.id,
+    timestamp: log.created_at,
+    userId: log.actor_id || '',
+    userName: log.actor_name || 'System',
+    userEmail: log.actor_email || '',
+    action: formatAction(log.action, log.details),
+    category: mapEntityTypeToCategory(log.entity_type),
+    severity: deriveSeverityFromAction(log.action),
+    details: formatDetails(log.action, log.details),
+    metadata: log.details || {},
+    ipAddress: log.ip_address || '',
+  };
 }
 
 const categoryIcons = {
@@ -70,104 +215,14 @@ const severityConfigs = {
 };
 
 export default function AuditLogsPage() {
-  const [logs, setLogs] = useState<AuditLog[]>([
-    {
-      id: '1',
-      timestamp: '2025-01-20T14:30:00Z',
-      userId: '1',
-      userName: 'Admin User',
-      userEmail: 'admin@example.com',
-      action: 'Updated application status',
-      category: 'application',
-      severity: 'success',
-      details: 'Changed application APP-2025-001 status from "pending" to "accepted"',
-      metadata: { applicationId: 'APP-2025-001', oldStatus: 'pending', newStatus: 'accepted' },
-      ipAddress: '192.168.1.1',
-    },
-    {
-      id: '2',
-      timestamp: '2025-01-20T14:15:00Z',
-      userId: '2',
-      userName: 'John Reviewer',
-      userEmail: 'john@example.com',
-      action: 'Added review comment',
-      category: 'application',
-      severity: 'info',
-      details: 'Added review comment to application APP-2025-002',
-      metadata: { applicationId: 'APP-2025-002' },
-      ipAddress: '192.168.1.2',
-    },
-    {
-      id: '3',
-      timestamp: '2025-01-20T14:00:00Z',
-      userId: '1',
-      userName: 'Admin User',
-      userEmail: 'admin@example.com',
-      action: 'Failed login attempt',
-      category: 'security',
-      severity: 'warning',
-      details: 'Failed login attempt from unknown device',
-      metadata: { reason: 'Invalid password' },
-      ipAddress: '203.0.113.0',
-    },
-    {
-      id: '4',
-      timestamp: '2025-01-20T13:45:00Z',
-      userId: '3',
-      userName: 'Super Admin',
-      userEmail: 'superadmin@example.com',
-      action: 'Updated system settings',
-      category: 'system',
-      severity: 'warning',
-      details: 'Modified application window settings',
-      metadata: { setting: 'applicationWindowOpen', value: true },
-      ipAddress: '192.168.1.3',
-    },
-    {
-      id: '5',
-      timestamp: '2025-01-20T13:30:00Z',
-      userId: '2',
-      userName: 'John Reviewer',
-      userEmail: 'john@example.com',
-      action: 'Created new user',
-      category: 'user',
-      severity: 'success',
-      details: 'Added new user "Jane Doe" with reviewer role',
-      metadata: { newUserId: '4', newUserEmail: 'jane@example.com' },
-      ipAddress: '192.168.1.2',
-    },
-    {
-      id: '6',
-      timestamp: '2025-01-20T13:15:00Z',
-      userId: '1',
-      userName: 'Admin User',
-      userEmail: 'admin@example.com',
-      action: 'Sent email notification',
-      category: 'email',
-      severity: 'info',
-      details: 'Sent application accepted email to applicant',
-      metadata: { templateId: 'acceptance', recipientEmail: 'applicant@example.com' },
-      ipAddress: '192.168.1.1',
-    },
-    {
-      id: '7',
-      timestamp: '2025-01-20T13:00:00Z',
-      userId: '3',
-      userName: 'Super Admin',
-      userEmail: 'superadmin@example.com',
-      action: 'Database backup failed',
-      category: 'system',
-      severity: 'error',
-      details: 'Scheduled database backup failed due to insufficient storage',
-      metadata: { error: 'Disk space full' },
-      ipAddress: '192.168.1.3',
-    },
-  ]);
-
-  const [filteredLogs, setFilteredLogs] = useState<AuditLog[]>(logs);
-  const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const { token } = useAuth();
+  const [logs, setLogs] = useState<DisplayAuditLog[]>([]);
+  const [filteredLogs, setFilteredLogs] = useState<DisplayAuditLog[]>([]);
+  const [selectedLog, setSelectedLog] = useState<DisplayAuditLog | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -175,9 +230,45 @@ export default function AuditLogsPage() {
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
+  const fetchLogs = useCallback(async () => {
+    if (!token) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Map category filter to entity_type
+      const entityTypeMap: Record<string, string | undefined> = {
+        'all': undefined,
+        'user': 'user',
+        'application': 'application',
+        'system': 'system',
+        'email': 'email',
+        'security': 'security',
+      };
+
+      const rawLogs = await getAuditLogs(token, {
+        entity_type: entityTypeMap[categoryFilter],
+        limit: 100,
+      });
+
+      const displayLogs = rawLogs.map(mapToDisplayLog);
+      setLogs(displayLogs);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch audit logs');
+      console.error('Failed to fetch audit logs:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, categoryFilter]);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
+
   useEffect(() => {
     applyFilters();
-  }, [searchQuery, categoryFilter, severityFilter, dateRange, logs]);
+  }, [searchQuery, severityFilter, dateRange, logs]);
 
   const applyFilters = () => {
     let filtered = [...logs];
@@ -189,11 +280,6 @@ export default function AuditLogsPage() {
         log.details.toLowerCase().includes(searchQuery.toLowerCase()) ||
         log.userName.toLowerCase().includes(searchQuery.toLowerCase())
       );
-    }
-
-    // Category filter
-    if (categoryFilter !== 'all') {
-      filtered = filtered.filter(log => log.category === categoryFilter);
     }
 
     // Severity filter
@@ -212,17 +298,14 @@ export default function AuditLogsPage() {
     setFilteredLogs(filtered);
   };
 
-  const handleViewDetails = (log: AuditLog) => {
+  const handleViewDetails = (log: DisplayAuditLog) => {
     setSelectedLog(log);
     setDetailsOpen(true);
   };
 
   const handleExport = async () => {
-    setLoading(true);
+    setExporting(true);
     try {
-      // TODO: Implement actual export functionality
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
       const csvContent = [
         ['Timestamp', 'User', 'Action', 'Category', 'Severity', 'Details', 'IP Address'].join(','),
         ...filteredLogs.map(log => [
@@ -246,7 +329,7 @@ export default function AuditLogsPage() {
     } catch (error) {
       console.error('Failed to export logs:', error);
     } finally {
-      setLoading(false);
+      setExporting(false);
     }
   };
 
@@ -266,8 +349,8 @@ export default function AuditLogsPage() {
     return date.toLocaleDateString() + ' at ' + date.toLocaleTimeString();
   };
 
-  const groupLogsByDate = (logs: AuditLog[]) => {
-    const groups: { [key: string]: AuditLog[] } = {};
+  const groupLogsByDate = (logs: DisplayAuditLog[]) => {
+    const groups: { [key: string]: DisplayAuditLog[] } = {};
 
     logs.forEach(log => {
       const date = new Date(log.timestamp).toLocaleDateString();
@@ -282,6 +365,14 @@ export default function AuditLogsPage() {
 
   const logGroups = groupLogsByDate(filteredLogs);
 
+  if (loading && logs.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -291,20 +382,34 @@ export default function AuditLogsPage() {
             View system activity and user actions
           </p>
         </div>
-        <Button onClick={handleExport} disabled={loading}>
-          {loading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Exporting...
-            </>
-          ) : (
-            <>
-              <Download className="mr-2 h-4 w-4" />
-              Export
-            </>
-          )}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={fetchLogs} disabled={loading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button onClick={handleExport} disabled={exporting}>
+            {exporting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Exporting...
+              </>
+            ) : (
+              <>
+                <Download className="mr-2 h-4 w-4" />
+                Export
+              </>
+            )}
+          </Button>
+        </div>
       </div>
+
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="py-4">
+            <p className="text-red-600">{error}</p>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -331,7 +436,9 @@ export default function AuditLogsPage() {
 
             <div className="space-y-2">
               <Label>Category</Label>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <Select value={categoryFilter} onValueChange={(value) => {
+                setCategoryFilter(value);
+              }}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -413,7 +520,7 @@ export default function AuditLogsPage() {
               <div className="absolute left-6 top-6 bottom-0 w-px bg-border" />
 
               <div className="space-y-4">
-                {dateLogs.map((log, index) => {
+                {dateLogs.map((log) => {
                   const CategoryIcon = categoryIcons[log.category];
                   const severityConfig = severityConfigs[log.severity];
                   const SeverityIcon = severityConfig.icon;
@@ -445,12 +552,12 @@ export default function AuditLogsPage() {
                           </div>
                         </CardHeader>
                         <CardContent className="pt-0">
-                          <p className="text-sm text-muted-foreground mb-3">{log.details}</p>
+                          <p className="text-sm text-muted-foreground mb-3">{log.details || 'No additional details'}</p>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <Avatar className="h-6 w-6">
                                 <AvatarFallback className="text-xs">
-                                  {log.userName.split(' ').map(n => n[0]).join('')}
+                                  {log.userName.split(' ').map(n => n[0]).join('').slice(0, 2)}
                                 </AvatarFallback>
                               </Avatar>
                               <span className="text-xs text-muted-foreground">{log.userName}</span>
@@ -467,13 +574,15 @@ export default function AuditLogsPage() {
           </div>
         ))}
 
-        {filteredLogs.length === 0 && (
+        {filteredLogs.length === 0 && !loading && (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Activity className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium mb-2">No logs found</h3>
               <p className="text-sm text-muted-foreground text-center max-w-sm">
-                No audit logs match your current filters. Try adjusting your search criteria.
+                {logs.length === 0
+                  ? 'No audit logs have been recorded yet. Actions like logins, approvals, and status changes will appear here.'
+                  : 'No audit logs match your current filters. Try adjusting your search criteria.'}
               </p>
             </CardContent>
           </Card>
@@ -508,7 +617,7 @@ export default function AuditLogsPage() {
                   <div className="flex items-center gap-2">
                     <Avatar className="h-6 w-6">
                       <AvatarFallback className="text-xs">
-                        {selectedLog.userName.split(' ').map(n => n[0]).join('')}
+                        {selectedLog.userName.split(' ').map(n => n[0]).join('').slice(0, 2)}
                       </AvatarFallback>
                     </Avatar>
                     <div className="text-sm font-medium">{selectedLog.userName}</div>
@@ -529,7 +638,7 @@ export default function AuditLogsPage() {
 
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Email</Label>
-                  <div className="text-sm">{selectedLog.userEmail}</div>
+                  <div className="text-sm">{selectedLog.userEmail || 'N/A'}</div>
                 </div>
 
                 <div className="space-y-1">
@@ -545,7 +654,7 @@ export default function AuditLogsPage() {
 
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Details</Label>
-                <div className="text-sm">{selectedLog.details}</div>
+                <div className="text-sm">{selectedLog.details || 'No additional details'}</div>
               </div>
 
               {selectedLog.metadata && Object.keys(selectedLog.metadata).length > 0 && (

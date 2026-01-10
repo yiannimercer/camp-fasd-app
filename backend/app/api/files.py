@@ -111,12 +111,23 @@ async def upload_file(
     - Uploads to Supabase Storage
     - Creates ApplicationFile record
     - Links file to ApplicationResponse
+    - Admins can upload files on behalf of families
     """
-    # Validate application belongs to user
-    application = db.query(Application).filter(
-        Application.id == application_id,
-        Application.user_id == current_user.id
-    ).first()
+    # Check if user is admin
+    is_admin = current_user.role in ["admin", "super_admin"]
+
+    # Validate application exists and user has access
+    if is_admin:
+        # Admins can upload to any application
+        application = db.query(Application).filter(
+            Application.id == application_id
+        ).first()
+    else:
+        # Regular users can only upload to their own applications
+        application = db.query(Application).filter(
+            Application.id == application_id,
+            Application.user_id == current_user.id
+        ).first()
 
     if not application:
         raise HTTPException(status_code=404, detail="Application not found")

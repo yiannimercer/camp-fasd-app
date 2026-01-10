@@ -101,3 +101,7 @@
     background-color: #202020;
   }
 }
+
+/* React Roast Feedback Widget Customizations */
+/* Email input hiding is handled by the widget's className: 'hidden' prop */
+/* Text replacement ("Roast" to "Feedback") is handled by JavaScript in FeedbackWidget.tsx */

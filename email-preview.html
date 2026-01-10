@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Admin Digest Email Preview</title>
+  <style>
+    body {
+      background: #f5f5f5;
+      padding: 40px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .email-container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      padding: 32px;
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <!-- Weekly Digest Header -->
+    <div style="text-align: center; margin-bottom: 28px;">
+      <span style="font-size: 42px;">📊</span>
+      <h2 style="color: #316429; font-size: 26px; margin: 8px 0 6px 0; font-weight: 700;">
+        Weekly Admin Digest
+      </h2>
+      <p style="color: #888; font-size: 14px; margin: 0;">CAMP 2025 &bull; December 30, 2025</p>
+    </div>
+
+    <!-- At-a-Glance Summary Bar -->
+    <div style="background: linear-gradient(135deg, #316429 0%, #4a8f39 100%); border-radius: 10px; padding: 20px 24px; margin-bottom: 24px;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="text-align: center; padding: 0 8px;">
+            <div style="font-size: 32px; font-weight: 700; color: #fff;">12</div>
+            <div style="font-size: 11px; color: rgba(255,255,255,0.85); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">Total Apps</div>
+          </td>
+          <td style="text-align: center; padding: 0 8px; border-left: 1px solid rgba(255,255,255,0.2);">
+            <div style="font-size: 32px; font-weight: 700; color: #fff;">2</div>
+            <div style="font-size: 11px; color: rgba(255,255,255,0.85); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">Campers</div>
+          </td>
+          <td style="text-align: center; padding: 0 8px; border-left: 1px solid rgba(255,255,255,0.2);">
+            <div style="font-size: 32px; font-weight: 700; color: #fff;">0</div>
+            <div style="font-size: 11px; color: rgba(255,255,255,0.85); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">Paid</div>
+          </td>
+          <td style="text-align: center; padding: 0 8px; border-left: 1px solid rgba(255,255,255,0.2);">
+            <div style="font-size: 32px; font-weight: 700; color: #ffe082;">5</div>
+            <div style="font-size: 11px; color: rgba(255,255,255,0.85); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">New This Week</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Application Pipeline Section -->
+    <div style="margin-bottom: 24px;">
+      <h3 style="color: #316429; font-size: 16px; margin: 0 0 14px 0; font-weight: 600;">
+        Application Pipeline
+      </h3>
+      <div style="background: #f8f9fa; border-radius: 8px; overflow: hidden;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <!-- Not Started -->
+          <tr>
+            <td style="padding: 14px 16px; border-bottom: 1px solid #e9ecef; width: 12px;">
+              <span style="display: inline-block; width: 10px; height: 10px; background: #9ca3af; border-radius: 50%;"></span>
+            </td>
+            <td style="padding: 14px 16px; border-bottom: 1px solid #e9ecef; color: #555; font-size: 15px;">
+              Not Started
+            </td>
+            <td style="padding: 14px 16px; border-bottom: 1px solid #e9ecef; text-align: right; font-weight: 600; color: #6b7280; font-size: 18px;">
+              3
+            </td>
+          </tr>
+          <!-- Incomplete -->
+          <tr>
+            <td style="padding: 14px 16px; border-bottom: 1px solid #e9ecef; width: 12px;">
+              <span style="display: inline-block; width: 10px; height: 10px; background: #3b82f6; border-radius: 50%;"></span>
+            </td>
+            <td style="padding: 14px 16px; border-bottom: 1px solid #e9ecef; color: #555; font-size: 15px;">
+              Incomplete
+            </td>
+            <td style="padding: 14px 16px; border-bottom: 1px solid #e9ecef; text-align: right; font-weight: 600; color: #3b82f6; font-size: 18px;">
+              2
+            </td>
+          </tr>
+          <!-- Complete -->
+          <tr>
+            <td style="padding: 14px 16px; border-bottom: 1px solid #e9ecef; width: 12px;">
+              <span style="display: inline-block; width: 10px; height: 10px; background: #6366f1; border-radius: 50%;"></span>
+            </td>
+            <td style="padding: 14px 16px; border-bottom: 1px solid #e9ecef; color: #555; font-size: 15px;">
+              Complete
+            </td>
+            <td style="padding: 14px 16px; border-bottom: 1px solid #e9ecef; text-align: right; font-weight: 600; color: #6366f1; font-size: 18px;">
+              1
+            </td>
+          </tr>
+          <!-- Under Review -->
+          <tr>
+            <td style="padding: 14px 16px; border-bottom: 1px solid #e9ecef; width: 12px;">
+              <span style="display: inline-block; width: 10px; height: 10px; background: #eab308; border-radius: 50%;"></span>
+            </td>
+            <td style="padding: 14px 16px; border-bottom: 1px solid #e9ecef; color: #555; font-size: 15px;">
+              Under Review
+            </td>
+            <td style="padding: 14px 16px; border-bottom: 1px solid #e9ecef; text-align: right; font-weight: 600; color: #ca8a04; font-size: 18px;">
+              1
+            </td>
+          </tr>
+          <!-- Waitlisted -->
+          <tr>
+            <td style="padding: 14px 16px; width: 12px;">
+              <span style="display: inline-block; width: 10px; height: 10px; background: #f97316; border-radius: 50%;"></span>
+            </td>
+            <td style="padding: 14px 16px; color: #555; font-size: 15px;">
+              Waitlisted
+            </td>
+            <td style="padding: 14px 16px; text-align: right; font-weight: 600; color: #f97316; font-size: 18px;">
+              0
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Camper Status Section -->
+    <div style="margin-bottom: 28px;">
+      <h3 style="color: #316429; font-size: 16px; margin: 0 0 14px 0; font-weight: 600;">
+        Accepted Campers
+      </h3>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="width: 50%; padding-right: 8px;">
+            <div style="background: #e8f5e9; border-radius: 8px; padding: 18px 16px; text-align: center;">
+              <div style="font-size: 28px; font-weight: 700; color: #316429;">0</div>
+              <div style="font-size: 13px; color: #666; margin-top: 6px;">Paid &amp; Ready</div>
+            </div>
+          </td>
+          <td style="width: 50%; padding-left: 8px;">
+            <div style="background: #fff3e0; border-radius: 8px; padding: 18px 16px; text-align: center;">
+              <div style="font-size: 28px; font-weight: 700; color: #e26e15;">2</div>
+              <div style="font-size: 13px; color: #666; margin-top: 6px;">Awaiting Payment</div>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Quick Actions -->
+    <div style="text-align: center; margin-top: 28px;">
+      <a href="#" style="display: inline-block; background-color: #316429; color: #fff; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: 600; font-size: 15px; margin-right: 10px;">Review Applications</a>
+      <a href="#" style="display: inline-block; background-color: #e9ecef; color: #333; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: 600; font-size: 15px;">Admin Dashboard</a>
+    </div>
+
+    <p style="color: #999; font-size: 12px; text-align: center; margin-top: 28px;">
+      This digest is sent weekly to all active administrators.
+    </p>
+  </div>
+</body>
+</html>
