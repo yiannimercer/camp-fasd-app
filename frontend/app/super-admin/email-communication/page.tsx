@@ -90,6 +90,8 @@ const EVENT_TRIGGERS = [
   // Payment Events
   { value: 'payment_received', label: 'Payment Received', description: 'When payment is confirmed', category: 'Payment' },
   { value: 'invoice_generated', label: 'Invoice Generated', description: 'When invoice is created for camper', category: 'Payment' },
+  { value: 'payment_plan_created', label: 'Payment Plan Created', description: 'When a payment plan is set up for camper', category: 'Payment' },
+  { value: 'scholarship_awarded', label: 'Scholarship Awarded', description: 'When scholarship is granted to camper', category: 'Payment' },
 
   // Section-based Events
   { value: 'section_completed', label: 'Section Completed', description: 'When any section reaches 100%', category: 'Section' },
@@ -98,6 +100,7 @@ const EVENT_TRIGGERS = [
   { value: 'admin_note_added', label: 'Admin Note Added', description: 'When admin adds a note to application', category: 'Admin' },
   { value: 'team_approval_added', label: 'Team Approval Added', description: 'When a team approves application', category: 'Admin' },
   { value: 'all_teams_approved', label: 'All Teams Approved', description: 'When all 3 teams have approved', category: 'Admin' },
+  { value: 'admin_payment_received', label: 'Admin: Payment Received', description: 'Notify admins when payment is received', category: 'Admin' },
 ]
 
 // Group events by category for better UI organization
