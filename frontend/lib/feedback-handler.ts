@@ -182,7 +182,7 @@ export async function handleFeedbackSubmit(
 
 /**
  * Helper to check if feedback widget should be enabled
- * Only show in non-production or for authenticated users
+ * Enabled in development, dev environment, and production (for beta testing)
  */
 export function shouldEnableFeedback(): boolean {
   // Enable in development
@@ -198,6 +198,15 @@ export function shouldEnableFeedback(): boolean {
     return true
   }
 
-  // Disable in production
+  // Enable in production for beta testing with real families
+  // This can be disabled later by removing this condition
+  if (
+    typeof window !== 'undefined' &&
+    window.location.hostname === 'app.fasdcamp.org'
+  ) {
+    return true
+  }
+
+  // Disable everywhere else
   return false
 }
