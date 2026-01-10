@@ -26,7 +26,6 @@ export interface Question {
     file_types?: string[];
     max_file_size?: number;
   };
-  show_when_status?: string | null;
   template_file_id?: string | null;
   template_filename?: string | null;
   show_if_question_id?: string | null;
@@ -53,7 +52,6 @@ export interface Section {
   description?: string;
   order_index: number;
   is_active: boolean;
-  show_when_status?: string | null;
   required_status?: string | null;  // NULL=all, 'applicant'=applicants only, 'camper'=campers only
   created_at: string;
   updated_at: string;
@@ -66,7 +64,6 @@ export interface SectionCreate {
   description?: string;
   order_index: number;
   is_active?: boolean;
-  show_when_status?: string | null;
   required_status?: string | null;  // NULL=all, 'applicant', 'camper'
 }
 
@@ -75,7 +72,6 @@ export interface SectionUpdate {
   description?: string;
   order_index?: number;
   is_active?: boolean;
-  show_when_status?: string | null;
   required_status?: string | null;  // NULL=all, 'applicant', 'camper'
 }
 
@@ -92,7 +88,6 @@ export interface QuestionCreate {
   order_index: number;
   options?: string[];
   validation_rules?: any;
-  show_when_status?: string | null;
   template_file_id?: string | null;
   show_if_question_id?: string | null;
   show_if_answer?: string | null;
@@ -112,7 +107,6 @@ export interface QuestionUpdate {
   order_index?: number;
   options?: string[];
   validation_rules?: any;
-  show_when_status?: string | null;
   template_file_id?: string | null;
   show_if_question_id?: string | null;
   show_if_answer?: string | null;

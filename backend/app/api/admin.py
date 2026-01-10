@@ -63,7 +63,7 @@ async def get_application_progress_admin(
     app_status = application.status  # 'applicant', 'camper', 'inactive'
     app_sub_status = application.sub_status  # Progress within status
 
-    # Get sections filtered by required_status and show_when_status
+    # Get sections filtered by required_status
     sections_query = db.query(ApplicationSection).filter(
         ApplicationSection.is_active == True
     )
@@ -75,17 +75,6 @@ async def get_application_progress_admin(
             (ApplicationSection.required_status == 'applicant')
         )
     # Campers see all sections
-
-    # Filter sections by show_when_status (uses sub_status)
-    if app_sub_status:
-        sections_query = sections_query.filter(
-            (ApplicationSection.show_when_status == None) |
-            (ApplicationSection.show_when_status == app_sub_status)
-        )
-    else:
-        sections_query = sections_query.filter(
-            ApplicationSection.show_when_status == None
-        )
 
     sections = sections_query.order_by(ApplicationSection.order_index).all()
 
@@ -113,22 +102,11 @@ async def get_application_progress_admin(
     completed_sections = 0
 
     for section in sections:
-        # Get questions for this section, filtered by sub_status
+        # Get questions for this section
         questions_query = db.query(ApplicationQuestion).filter(
             ApplicationQuestion.section_id == section.id,
             ApplicationQuestion.is_active == True
         )
-
-        # Filter questions by show_when_status (uses sub_status)
-        if app_sub_status:
-            questions_query = questions_query.filter(
-                (ApplicationQuestion.show_when_status == None) |
-                (ApplicationQuestion.show_when_status == app_sub_status)
-            )
-        else:
-            questions_query = questions_query.filter(
-                ApplicationQuestion.show_when_status == None
-            )
 
         questions = questions_query.all()
 

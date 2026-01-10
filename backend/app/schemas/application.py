@@ -14,7 +14,6 @@ class ApplicationSectionBase(BaseModel):
     order_index: int
     is_active: bool = True
     visible_before_acceptance: bool = True
-    show_when_status: Optional[str] = None
     required_status: Optional[str] = None  # NULL=all, 'applicant'=applicant only, 'camper'=camper only
     score_calculation_type: Optional[str] = None  # e.g., 'fasd_best' for FASD BeST score calculation
 
@@ -43,7 +42,6 @@ class ApplicationQuestionBase(BaseModel):
     description: Optional[str] = None  # Long-form markdown description
     placeholder: Optional[str] = None
     is_active: bool = True
-    show_when_status: Optional[str] = None
     # Conditional logic fields
     show_if_question_id: Optional[UUID4] = None
     show_if_answer: Optional[str] = None

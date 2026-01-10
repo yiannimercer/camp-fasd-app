@@ -80,36 +80,12 @@ async def get_application_sections(
         )
     # Campers see all sections (no required_status filter)
 
-    # Filter sections by show_when_status (uses sub_status for conditional visibility)
-    if app_sub_status:
-        sections_query = sections_query.filter(
-            (ApplicationSection.show_when_status == None) |
-            (ApplicationSection.show_when_status == app_sub_status)
-        )
-    else:
-        # If no sub_status, only show sections with no status requirement
-        sections_query = sections_query.filter(
-            ApplicationSection.show_when_status == None
-        )
-
     sections = sections_query.order_by(ApplicationSection.order_index).all()
 
-    # Filter questions within each section by show_when_status (uses sub_status)
-    # Also filter headers by is_active
-    if app_sub_status:
-        for section in sections:
-            section.questions = [
-                q for q in section.questions
-                if q.is_active and (q.show_when_status is None or q.show_when_status == app_sub_status)
-            ]
-            section.headers = [h for h in section.headers if h.is_active]
-    else:
-        for section in sections:
-            section.questions = [
-                q for q in section.questions
-                if q.is_active and q.show_when_status is None
-            ]
-            section.headers = [h for h in section.headers if h.is_active]
+    # Filter questions and headers by is_active
+    for section in sections:
+        section.questions = [q for q in section.questions if q.is_active]
+        section.headers = [h for h in section.headers if h.is_active]
 
     return sections
 
@@ -270,34 +246,12 @@ async def get_application_sections_admin(
         )
     # Campers see all sections
 
-    # Filter sections by show_when_status
-    if app_sub_status:
-        sections_query = sections_query.filter(
-            (ApplicationSection.show_when_status == None) |
-            (ApplicationSection.show_when_status == app_sub_status)
-        )
-    else:
-        sections_query = sections_query.filter(
-            ApplicationSection.show_when_status == None
-        )
-
     sections = sections_query.order_by(ApplicationSection.order_index).all()
 
-    # Filter questions within each section by show_when_status and headers by is_active
-    if app_sub_status:
-        for section in sections:
-            section.questions = [
-                q for q in section.questions
-                if q.is_active and (q.show_when_status is None or q.show_when_status == app_sub_status)
-            ]
-            section.headers = [h for h in section.headers if h.is_active]
-    else:
-        for section in sections:
-            section.questions = [
-                q for q in section.questions
-                if q.is_active and q.show_when_status is None
-            ]
-            section.headers = [h for h in section.headers if h.is_active]
+    # Filter questions and headers by is_active
+    for section in sections:
+        section.questions = [q for q in section.questions if q.is_active]
+        section.headers = [h for h in section.headers if h.is_active]
 
     return sections
 
@@ -815,17 +769,6 @@ async def get_application_progress(
         )
     # Campers see all sections
 
-    # Filter sections by show_when_status (uses sub_status)
-    if app_sub_status:
-        sections_query = sections_query.filter(
-            (ApplicationSection.show_when_status == None) |
-            (ApplicationSection.show_when_status == app_sub_status)
-        )
-    else:
-        sections_query = sections_query.filter(
-            ApplicationSection.show_when_status == None
-        )
-
     sections = sections_query.order_by(ApplicationSection.order_index).all()
 
     # Get all responses for this application (we need these to evaluate conditional logic)
@@ -855,15 +798,6 @@ async def get_application_progress(
     for section in sections:
         # OPTIMIZED: Filter questions in memory (already loaded via joinedload)
         questions = [q for q in section.questions if q.is_active]
-
-        # Filter questions by show_when_status (uses sub_status)
-        if app_sub_status:
-            questions = [
-                q for q in questions
-                if q.show_when_status is None or q.show_when_status == app_sub_status
-            ]
-        else:
-            questions = [q for q in questions if q.show_when_status is None]
 
         # Filter questions by conditional logic
         visible_questions = [q for q in questions if should_show_question(q)]
@@ -951,10 +885,6 @@ def calculate_completion_for_status(db: Session, application_id: str, target_sta
         sections_query = sections_query.filter(
             (ApplicationSection.required_status == None) |
             (ApplicationSection.required_status == 'applicant')
-        )
-        # For applicants, only show sections with no show_when_status requirement
-        sections_query = sections_query.filter(
-            ApplicationSection.show_when_status == None
         )
 
     sections = sections_query.all()
@@ -1045,7 +975,6 @@ def calculate_completion_percentage(db: Session, application_id: str) -> int:
         )
     # For Camper/Inactive, include all sections (no required_status filter)
 
-    # Note: Sections don't use show_when_status - they use required_status for visibility
     # Order by order_index to ensure consistent ordering
     sections = sections_query.order_by(ApplicationSection.order_index).all()
 
@@ -1088,18 +1017,6 @@ def calculate_completion_percentage(db: Session, application_id: str) -> int:
         # OPTIMIZED: Filter questions in memory (already loaded via joinedload)
         # No database query needed - questions are pre-loaded with sections
         questions = [q for q in section.questions if q.is_active]
-
-        # Filter questions by show_when_status (based on main status, not sub_status)
-        # - NULL: Show for everyone
-        # - 'applicant': Show only for applicants
-        # - 'accepted' or 'camper': Show for campers (legacy 'accepted' = 'camper')
-        if app_status == 'applicant':
-            # Applicants see: NULL or 'applicant' questions
-            questions = [
-                q for q in questions
-                if q.show_when_status is None or q.show_when_status == 'applicant'
-            ]
-        # Campers see all questions (NULL, 'applicant', 'accepted', 'camper') - no filter needed
 
         # Sort by order_index (already sorted by relationship, but ensure consistency)
         questions = sorted(questions, key=lambda q: q.order_index or 0)

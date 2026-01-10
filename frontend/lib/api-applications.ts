@@ -23,7 +23,6 @@ export interface ApplicationSection {
   order_index: number
   is_active: boolean
   visible_before_acceptance: boolean
-  show_when_status: string | null  // Sub-status requirement for visibility
   required_status: string | null   // NULL=all, 'applicant'=applicant only, 'camper'=camper only
   score_calculation_type: string | null  // e.g., 'fasd_best' for FASD BeST score calculation
   created_at: string

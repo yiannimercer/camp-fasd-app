@@ -92,12 +92,6 @@ const questionTypes = [
   { value: 'signature', label: 'Signature', description: 'Electronic signature' },
 ];
 
-const visibilityOptions = [
-  { value: 'always', label: 'Always Visible', description: 'Show for all applicants' },
-  { value: 'accepted', label: 'After Acceptance', description: 'Show only after camper is accepted' },
-  { value: 'paid', label: 'After Payment', description: 'Show only after payment is complete' },
-];
-
 const statusOptions = [
   { value: 'all', label: 'All Statuses', description: 'Show for both Applicants and Campers' },
   { value: 'applicant', label: 'Applicants Only', description: 'Show only while filling out the initial application' },
@@ -176,7 +170,6 @@ export default function ApplicationBuilderPage() {
   const [sectionForm, setSectionForm] = useState({
     title: '',
     description: '',
-    show_when_status: 'always' as 'always' | 'accepted' | 'paid',
     required_status: 'all' as 'all' | 'applicant' | 'camper',
     is_active: true,
   });
@@ -189,7 +182,6 @@ export default function ApplicationBuilderPage() {
     is_required: true,
     is_active: true,
     persist_annually: false,
-    show_when_status: null,
     options: [],
     validation_rules: {},
     show_if_question_id: null,
@@ -226,7 +218,6 @@ export default function ApplicationBuilderPage() {
     setSectionForm({
       title: '',
       description: '',
-      show_when_status: 'always',
       required_status: 'all',
       is_active: true,
     });
@@ -238,7 +229,6 @@ export default function ApplicationBuilderPage() {
     setSectionForm({
       title: section.title,
       description: section.description || '',
-      show_when_status: (section.show_when_status || 'always') as 'always' | 'accepted' | 'paid',
       required_status: (section.required_status || 'all') as 'all' | 'applicant' | 'camper',
       is_active: section.is_active,
     });
@@ -258,7 +248,6 @@ export default function ApplicationBuilderPage() {
           title: sectionForm.title,
           description: sectionForm.description,
           is_active: sectionForm.is_active,
-          show_when_status: sectionForm.show_when_status === 'always' ? null : sectionForm.show_when_status,
           required_status: sectionForm.required_status === 'all' ? null : sectionForm.required_status,
         });
         setSections(prev => prev.map(s => s.id === editingSectionId ? updated : s));
@@ -269,7 +258,6 @@ export default function ApplicationBuilderPage() {
           description: sectionForm.description,
           order_index: sections.length,
           is_active: sectionForm.is_active,
-          show_when_status: sectionForm.show_when_status === 'always' ? null : sectionForm.show_when_status,
           required_status: sectionForm.required_status === 'all' ? null : sectionForm.required_status,
         });
         setSections(prev => [...prev, created]);
@@ -312,7 +300,6 @@ export default function ApplicationBuilderPage() {
       is_required: true,
       is_active: true,
       persist_annually: false,
-      show_when_status: 'always',
       options: [],
       validation_rules: {},
       show_if_question_id: null,
@@ -355,7 +342,6 @@ export default function ApplicationBuilderPage() {
           persist_annually: questionForm.persist_annually,
           options: supportsOptions ? questionForm.options : [],
           validation_rules: questionForm.validation_rules,
-          show_when_status: questionForm.show_when_status,
           template_file_id: questionForm.template_file_id,
           show_if_question_id: questionForm.show_if_question_id,
           show_if_answer: questionForm.show_if_answer,
@@ -392,7 +378,6 @@ export default function ApplicationBuilderPage() {
           order_index: selectedSection.questions.length,
           options: supportsOptions ? questionForm.options : [],
           validation_rules: questionForm.validation_rules,
-          show_when_status: questionForm.show_when_status,
           template_file_id: questionForm.template_file_id,
           show_if_question_id: questionForm.show_if_question_id,
           show_if_answer: questionForm.show_if_answer,
@@ -966,11 +951,6 @@ export default function ApplicationBuilderPage() {
                       {!section.is_active && (
                         <Badge variant="secondary">Inactive</Badge>
                       )}
-                      {section.show_when_status !== 'always' && (
-                        <Badge variant="outline">
-                          {visibilityOptions.find(v => v.value === section.show_when_status)?.label}
-                        </Badge>
-                      )}
                       {section.required_status && (
                         <Badge variant="outline" className="bg-purple-50 border-purple-300 text-purple-700">
                           {section.required_status === 'applicant' ? 'Applicants Only' : 'Campers Only'}
@@ -1157,11 +1137,6 @@ export default function ApplicationBuilderPage() {
                               <Badge variant="outline" className="text-xs">
                                 {questionTypes.find(t => t.value === question.question_type)?.label}
                               </Badge>
-                              {question.show_when_status !== 'always' && (
-                                <Badge variant="outline" className="text-xs">
-                                  {visibilityOptions.find(v => v.value === question.show_when_status)?.label}
-                                </Badge>
-                              )}
                               {question.options && question.options.length > 0 &&
                                ['dropdown', 'multiple_choice', 'checkbox'].includes(question.question_type) && (
                                 <Badge variant="outline" className="text-xs">
@@ -1343,30 +1318,6 @@ export default function ApplicationBuilderPage() {
                 onChange={(e) => setSectionForm(prev => ({ ...prev, description: e.target.value }))}
                 placeholder="Brief description of this section"
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="section-visibility">When to Show</Label>
-              <Select
-                value={sectionForm.show_when_status}
-                onValueChange={(value: any) =>
-                  setSectionForm(prev => ({ ...prev, show_when_status: value }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {visibilityOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      <div>
-                        <div className="font-medium">{option.label}</div>
-                        <div className="text-xs text-muted-foreground">{option.description}</div>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
 
             <div className="space-y-2">
@@ -1622,30 +1573,6 @@ export default function ApplicationBuilderPage() {
                 </div>
               </div>
             )}
-
-            <div className="space-y-2">
-              <Label htmlFor="question-visibility">When to Show</Label>
-              <Select
-                value={questionForm.show_when_status || 'always'}
-                onValueChange={(value: any) =>
-                  setQuestionForm(prev => ({ ...prev, show_when_status: value }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {visibilityOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      <div>
-                        <div className="font-medium">{option.label}</div>
-                        <div className="text-xs text-muted-foreground">{option.description}</div>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
 
             <Separator />
 

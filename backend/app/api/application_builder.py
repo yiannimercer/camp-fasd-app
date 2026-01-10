@@ -40,7 +40,6 @@ class QuestionBase(BaseModel):
     order_index: int
     options: Optional[Union[List[str], Dict[str, Any]]] = None
     validation_rules: Optional[QuestionValidationRules] = None
-    show_when_status: Optional[str] = None
     template_file_id: Optional[UUID] = None
     show_if_question_id: Optional[UUID] = None
     show_if_answer: Optional[str] = None
@@ -64,7 +63,6 @@ class QuestionUpdate(BaseModel):
     order_index: Optional[int] = None
     options: Optional[Union[List[str], Dict[str, Any]]] = None
     validation_rules: Optional[QuestionValidationRules] = None
-    show_when_status: Optional[str] = None
     template_file_id: Optional[UUID] = None
     show_if_question_id: Optional[UUID] = None
     show_if_answer: Optional[str] = None
@@ -87,7 +85,6 @@ class SectionBase(BaseModel):
     description: Optional[str] = None
     order_index: int
     is_active: bool = True
-    show_when_status: Optional[str] = None
     required_status: Optional[str] = None  # NULL=all, 'applicant'=applicant only, 'camper'=camper only
 
 
@@ -100,7 +97,6 @@ class SectionUpdate(BaseModel):
     description: Optional[str] = None
     order_index: Optional[int] = None
     is_active: Optional[bool] = None
-    show_when_status: Optional[str] = None
     required_status: Optional[str] = None  # NULL=all, 'applicant', 'camper'
 
 
@@ -175,7 +171,6 @@ def convert_section_to_response(section: ApplicationSection) -> dict:
         "description": section.description,
         "order_index": section.order_index,
         "is_active": section.is_active,
-        "show_when_status": section.show_when_status,
         "required_status": section.required_status,  # NULL=all, 'applicant', 'camper'
         "created_at": section.created_at.isoformat(),
         "updated_at": section.updated_at.isoformat(),
@@ -215,7 +210,6 @@ def convert_question_to_response(question: ApplicationQuestion) -> dict:
         "order_index": question.order_index,
         "options": question.options,
         "validation_rules": question.validation_rules,
-        "show_when_status": question.show_when_status,
         "template_file_id": str(question.template_file_id) if question.template_file_id else None,
         "template_filename": template_filename,
         "show_if_question_id": str(question.show_if_question_id) if question.show_if_question_id else None,
@@ -256,17 +250,11 @@ async def create_section(
 ):
     """Create a new application section"""
 
-    # Convert 'always' to NULL for show_when_status (database constraint)
-    show_when_status_value = section.show_when_status
-    if show_when_status_value == 'always':
-        show_when_status_value = None
-
     new_section = ApplicationSection(
         title=section.title,
         description=section.description,
         order_index=section.order_index,
         is_active=section.is_active,
-        show_when_status=show_when_status_value,
         required_status=section.required_status  # NULL=all, 'applicant', 'camper'
     )
 
@@ -305,12 +293,6 @@ async def update_section(
         db_section.order_index = section.order_index
     if section.is_active is not None:
         db_section.is_active = section.is_active
-    if section.show_when_status is not None:
-        # Convert 'always' to NULL for show_when_status (database constraint)
-        show_when_status_value = section.show_when_status
-        if show_when_status_value == 'always':
-            show_when_status_value = None
-        db_section.show_when_status = show_when_status_value
     if section.required_status is not None:
         db_section.required_status = section.required_status  # NULL=all, 'applicant', 'camper'
 
@@ -363,11 +345,6 @@ async def create_question(
     if question.validation_rules:
         validation_rules_dict = question.validation_rules.dict()
 
-    # Convert 'always' to NULL for show_when_status (database constraint)
-    show_when_status_value = question.show_when_status
-    if show_when_status_value == 'always':
-        show_when_status_value = None
-
     new_question = ApplicationQuestion(
         section_id=question.section_id,
         question_text=question.question_text,
@@ -380,7 +357,6 @@ async def create_question(
         order_index=question.order_index,
         options=question.options,
         validation_rules=validation_rules_dict,
-        show_when_status=show_when_status_value,
         template_file_id=question.template_file_id,
         show_if_question_id=question.show_if_question_id,
         show_if_answer=question.show_if_answer,
@@ -434,12 +410,6 @@ async def update_question(
         db_question.options = question.options
     if question.validation_rules is not None:
         db_question.validation_rules = question.validation_rules.dict()
-    if question.show_when_status is not None:
-        # Convert 'always' to NULL for show_when_status (database constraint)
-        show_when_status_value = question.show_when_status
-        if show_when_status_value == 'always':
-            show_when_status_value = None
-        db_question.show_when_status = show_when_status_value
     if question.template_file_id is not None:
         db_question.template_file_id = question.template_file_id
     if question.show_if_question_id is not None:
@@ -517,7 +487,6 @@ async def duplicate_question(
         order_index=original_question.order_index + 1,  # Place right after original
         options=original_question.options,
         validation_rules=original_question.validation_rules,
-        show_when_status=original_question.show_when_status,
         template_file_id=original_question.template_file_id,
         show_if_question_id=original_question.show_if_question_id,
         show_if_answer=original_question.show_if_answer,
