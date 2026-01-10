@@ -4,6 +4,51 @@ This document tracks future enhancement ideas for the CAMP FASD Application Port
 
 ---
 
+## How to Add New Enhancements
+
+**For Claude:** When asked to add a new enhancement, copy the template below and fill it in.
+
+**For Humans:** Copy the template and fill in the details, or just describe the idea and ask Claude to scope it.
+
+### Template (Copy This)
+
+```
+---
+
+## [NUMBER]. [TITLE]
+
+**Status:** Idea | Scoped | In Progress | Complete
+**Priority:** Low | Medium | High | Critical
+**Effort:** ~X hours
+
+### Overview
+Brief description of the enhancement.
+
+### Current State
+What exists today and why it's insufficient.
+
+### Proposed Enhancement
+What the new behavior should be.
+
+### Implementation Scope
+- Backend changes needed
+- Frontend changes needed
+- Database changes needed
+
+### Files to Modify
+- List of files
+
+### Considerations
+- Edge cases, performance, etc.
+```
+
+---
+---
+
+# Enhancement List
+
+---
+
 ## 1. Dynamic Incomplete Sections in Reminder Emails
 
 **Status:** Scoped
@@ -82,49 +127,6 @@ ORDER BY s.order_index;
 
 ---
 
-## 2. [Add Your Enhancement Ideas Below]
+## 2. [Next Enhancement Goes Here]
 
-**Status:** Idea
-**Priority:** TBD
-**Effort:** TBD
-
-### Overview
-_Describe the enhancement here_
-
-### Current State
-_What exists today_
-
-### Proposed Enhancement
-_What should change_
-
----
-
-## Template for New Ideas
-
-```markdown
-## N. Enhancement Title
-
-**Status:** Idea | Scoped | In Progress | Complete
-**Priority:** Low | Medium | High | Critical
-**Effort:** ~X hours
-
-### Overview
-Brief description of the enhancement.
-
-### Current State
-What exists today and why it's insufficient.
-
-### Proposed Enhancement
-What the new behavior should be.
-
-### Implementation Scope
-- Backend changes needed
-- Frontend changes needed
-- Database changes needed
-
-### Files to Modify
-- List of files
-
-### Considerations
-- Edge cases, performance, etc.
-```
+_Use the template above to add new enhancements_
