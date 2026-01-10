@@ -303,14 +303,17 @@ WORDPRESS_FIELD_MAPPING = {
 class MigrationContext:
     """Holds database connections and configuration"""
 
-    def __init__(self, dry_run: bool = False):
+    def __init__(self, dry_run: bool = False, db_url: Optional[str] = None,
+                 supabase_url: Optional[str] = None, supabase_key: Optional[str] = None):
         self.dry_run = dry_run
-        self.db_url = os.environ.get('DATABASE_URL')
-        self.supabase_url = os.environ.get('SUPABASE_URL')
-        self.supabase_key = os.environ.get('SUPABASE_KEY')
+
+        # CLI args override env vars
+        self.db_url = db_url or os.environ.get('DATABASE_URL')
+        self.supabase_url = supabase_url or os.environ.get('SUPABASE_URL')
+        self.supabase_key = supabase_key or os.environ.get('SUPABASE_KEY')
 
         if not all([self.db_url, self.supabase_url, self.supabase_key]):
-            raise ValueError("Missing required environment variables. Check backend/.env")
+            raise ValueError("Missing required credentials. Provide via --db-url, --supabase-url, --supabase-key or env vars")
 
         # Initialize database connection
         self.engine = create_engine(self.db_url)
@@ -1169,7 +1172,10 @@ def run_migration(
     campers_file: str,
     private_folder: str,
     dry_run: bool = False,
-    single_user_id: Optional[int] = None
+    single_user_id: Optional[int] = None,
+    db_url: Optional[str] = None,
+    supabase_url: Optional[str] = None,
+    supabase_key: Optional[str] = None
 ):
     """
     Main migration function.
@@ -1180,6 +1186,9 @@ def run_migration(
         private_folder: Path to _private folder with uploaded files
         dry_run: If True, don't make actual changes
         single_user_id: If set, only migrate this WordPress user ID (for testing)
+        db_url: Override DATABASE_URL env var
+        supabase_url: Override SUPABASE_URL env var
+        supabase_key: Override SUPABASE_KEY env var
     """
     logger.info("=" * 60)
     logger.info("WordPress to Supabase Data Migration")
@@ -1188,7 +1197,7 @@ def run_migration(
     logger.info("=" * 60)
 
     # Initialize context
-    ctx = MigrationContext(dry_run=dry_run)
+    ctx = MigrationContext(dry_run=dry_run, db_url=db_url, supabase_url=supabase_url, supabase_key=supabase_key)
 
     # Load data files
     logger.info(f"Loading users from: {users_file}")
@@ -1322,6 +1331,9 @@ def main():
     parser.add_argument('--test', action='store_true', help='Use test data files instead of production')
     parser.add_argument('--dry-run', action='store_true', help='Preview changes without making them')
     parser.add_argument('--user-id', type=int, help='Only migrate a specific WordPress user ID')
+    parser.add_argument('--db-url', type=str, help='Database URL (overrides env var)')
+    parser.add_argument('--supabase-url', type=str, help='Supabase URL (overrides env var)')
+    parser.add_argument('--supabase-key', type=str, help='Supabase service role key (overrides env var)')
 
     args = parser.parse_args()
 
@@ -1356,7 +1368,10 @@ def main():
         campers_file=str(campers_file),
         private_folder=str(private_folder),
         dry_run=args.dry_run,
-        single_user_id=args.user_id
+        single_user_id=args.user_id,
+        db_url=args.db_url,
+        supabase_url=args.supabase_url,
+        supabase_key=args.supabase_key
     )
 
 
