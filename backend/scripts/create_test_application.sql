@@ -1,7 +1,7 @@
 -- ============================================================================
 -- Create Complete Test Application with VALID Responses
--- Picks actual valid values from question options
--- Does NOT hardcode any completion values - system calculates naturally
+-- Creates a 100% complete application in under_review status ready to ACCEPT
+-- Used for testing Stripe invoice generation
 -- ============================================================================
 
 -- ======================================================
@@ -15,10 +15,10 @@
 DO $$
 DECLARE
     -- TEST CONFIGURATION - CHANGE THESE VALUES
-    v_camper_first_name TEXT := 'CompletionTest';
-    v_camper_last_name TEXT := 'BugFix';
+    v_camper_first_name TEXT := 'StripeTest';
+    v_camper_last_name TEXT := 'RegularUser';
 
-    v_user_id UUID := '6eea99ab-cc77-40c5-a299-dbf7eade0829';  -- yianni@fasdcamp.org
+    v_user_id UUID := 'ba84abbf-5c5e-45b7-b437-49f461e9dc9c';  -- yjmercer@gmail.com
     v_app_id UUID;
     v_file_id UUID;
     v_question RECORD;
@@ -26,7 +26,7 @@ DECLARE
     v_first_option TEXT;
     v_file_counter INT := 0;
 BEGIN
-    -- Create the application with minimal info - NO completion hardcoding
+    -- Create the application at 100% under_review - ready to accept
     INSERT INTO applications (
         user_id,
         camper_first_name,
@@ -35,6 +35,7 @@ BEGIN
         camper_gender,
         status,
         sub_status,
+        completion_percentage,
         is_returning_camper,
         created_at,
         updated_at
@@ -45,7 +46,8 @@ BEGIN
         11,
         'Female',
         'applicant',
-        'not_started',
+        'under_review',  -- Ready to accept
+        100,             -- 100% complete
         false,
         NOW(),
         NOW()
@@ -55,6 +57,7 @@ BEGIN
     RAISE NOTICE 'Created application: %', v_app_id;
 
     -- Loop through ALL required questions for applicants
+    -- Note: show_when_status column was removed in migration 030
     FOR v_question IN
         SELECT q.id, q.question_type, q.question_text, q.options, s.title as section_title
         FROM application_questions q
@@ -63,7 +66,6 @@ BEGIN
           AND q.is_required = true
           AND s.is_active = true
           AND (s.required_status IS NULL OR s.required_status = 'applicant')
-          AND (q.show_when_status IS NULL OR q.show_when_status = 'applicant')
         ORDER BY s.order_index, q.order_index
     LOOP
         v_file_id := NULL;
@@ -74,10 +76,6 @@ BEGIN
             v_response_value := v_camper_first_name;
         ELSIF v_question.question_text = 'Camper Last Name' THEN
             v_response_value := v_camper_last_name;
-        -- SKIP the Authorizations checkbox to leave at 92% - user will complete manually
-        ELSIF v_question.question_text = 'Authorizations' AND v_question.question_type = 'checkbox' THEN
-            RAISE NOTICE 'Skipping Authorizations checkbox (user will complete this manually)';
-            CONTINUE;  -- Skip this question
         -- For dropdown/multiple_choice, get the FIRST valid option from the options array
         ELSIF v_question.question_type IN ('dropdown', 'multiple_choice') AND v_question.options IS NOT NULL THEN
             -- Extract first option from JSON array
@@ -154,42 +152,26 @@ BEGIN
     RAISE NOTICE 'Test Application Created: %', v_app_id;
     RAISE NOTICE '========================================';
     RAISE NOTICE 'Camper: % %', v_camper_first_name, v_camper_last_name;
-    RAISE NOTICE 'Status: applicant / incomplete (92%%)';
+    RAISE NOTICE 'Status: applicant / under_review (100%%)';
     RAISE NOTICE '';
-    RAISE NOTICE 'TO COMPLETE:';
-    RAISE NOTICE '1. Open application in frontend as family user';
-    RAISE NOTICE '2. Go to "Authorizations" section';
-    RAISE NOTICE '3. Check the authorization checkbox';
-    RAISE NOTICE '4. This will trigger 100%% completion + email';
+    RAISE NOTICE 'READY TO TEST:';
+    RAISE NOTICE '1. Go to Admin panel > Applications';
+    RAISE NOTICE '2. Find this application and add 3 team approvals (or use super admin)';
+    RAISE NOTICE '3. Click Accept to test Stripe invoice generation';
+    RAISE NOTICE '4. Check Vercel logs for invoice creation result';
 
 END $$;
 
--- Show what was created (completion_percentage will be 0 until API recalculates)
+-- Show what was created
 SELECT
     a.id,
     a.camper_first_name || ' ' || a.camper_last_name AS camper_name,
     a.status,
     a.sub_status,
-    a.completion_percentage as stored_completion,
+    a.completion_percentage,
     (SELECT COUNT(*) FROM application_responses WHERE application_id = a.id) AS total_responses,
     (SELECT COUNT(*) FROM files WHERE application_id = a.id) AS file_uploads
 FROM applications a
-WHERE a.camper_first_name = 'CompletionTest'
+WHERE a.camper_first_name = 'StripeTest'
 ORDER BY a.created_at DESC
 LIMIT 1;
-
--- Show section breakdown with answered counts
-SELECT
-    s.title,
-    (SELECT COUNT(*) FROM application_questions q
-     WHERE q.section_id = s.id AND q.is_required = true AND q.is_active = true
-     AND (s.required_status IS NULL OR s.required_status = 'applicant')) as required_qs,
-    (SELECT COUNT(*) FROM application_responses ar
-     JOIN application_questions q ON ar.question_id = q.id
-     WHERE q.section_id = s.id AND q.is_required = true AND q.is_active = true
-     AND ar.application_id = (SELECT id FROM applications WHERE camper_first_name = 'CompletionTest' ORDER BY created_at DESC LIMIT 1)
-     AND (ar.response_value IS NOT NULL OR ar.file_id IS NOT NULL)) as answered
-FROM application_sections s
-WHERE s.is_active = true
-  AND (s.required_status IS NULL OR s.required_status = 'applicant')
-ORDER BY s.order_index;
