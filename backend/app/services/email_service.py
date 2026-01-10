@@ -364,7 +364,7 @@ def get_branded_email_wrapper(db: Session, content: str, subject: str = "") -> s
                     <!-- Header with Logo -->
                     <tr>
                         <td style="background: linear-gradient(135deg, {forest_green} 0%, #3d7a32 100%); padding: 30px 40px; text-align: center;">
-                            <img src="{logo_url}" alt="CAMP - A FASD Community" style="max-width: 200px; height: auto;" />
+                            <img src="{logo_url}" alt="CAMP - A FASD Community" width="140" height="auto" style="width: 140px; max-width: 140px; height: auto;" />
                             <p style="color: #ffffff; font-size: 14px; margin: 10px 0 0 0; opacity: 0.9;">Camp Year {camp_year}</p>
                         </td>
                     </tr>
