@@ -62,10 +62,14 @@ export function AppHeader({ currentView }: AppHeaderProps) {
   ]
 
   // Filter views based on user role
+  // Regular admins only see Admin view (they get redirected from User dashboard anyway)
+  // Super admins see all three views
+  // Regular users only see User view
   const availableViews = views.filter(view => {
     if (view.requiredRole === 'super_admin') return isSuperAdmin
     if (view.requiredRole === 'admin') return isAdmin
-    return true // User view available to all
+    if (view.requiredRole === 'user') return isSuperAdmin || user.role === 'user' // Only super_admin and regular users
+    return false
   })
 
   // Get current view label for badge
