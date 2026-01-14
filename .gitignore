@@ -18,8 +18,8 @@ CVcamper_export_2025-12-29.json
 application_questions_export.csv
 TODO.md
 /migration-data
-/docs/
 /scripts/*.md
+
 
 # Environment variables
 .env

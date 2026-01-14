@@ -130,3 +130,11 @@ ORDER BY s.order_index;
 ## 2. [Next Enhancement Goes Here]
 
 _Use the template above to add new enhancements_
+
+
+
+### BRAIN DUMP
+
+- The fact we can't delete apps/user if they have email_logs associated with them? Why is that a dependency? I want to see their email logs even if we remove their apps / user historically.
+
+- **Re-enable RLS on `beta_feedback` table** - Disabled RLS on 2026-01-10 to allow anonymous feedback submission during beta testing. Once beta testing is complete or if we want to restrict who can submit feedback, re-enable with: `ALTER TABLE beta_feedback ENABLE ROW LEVEL SECURITY;` and create appropriate policies.
