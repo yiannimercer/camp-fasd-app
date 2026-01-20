@@ -83,6 +83,14 @@ export default function ApplicationWizardPage() {
     }
   }, [currentSectionIndex, applicationId])
 
+  // Scroll to top when section changes (for better UX when navigating between sections)
+  useEffect(() => {
+    // Only scroll if not the initial load (sections are loaded)
+    if (sections.length > 0) {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }, [currentSectionIndex])
+
   // Load sections, progress, and existing responses
   useEffect(() => {
     if (!token) return
