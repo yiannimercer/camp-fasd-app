@@ -179,6 +179,7 @@ export default function ApplicationBuilderPage() {
     question_text: '',
     question_type: 'text' as Question['question_type'],
     help_text: '',
+    placeholder: '',
     is_required: true,
     is_active: true,
     persist_annually: false,
@@ -297,6 +298,7 @@ export default function ApplicationBuilderPage() {
       question_text: '',
       question_type: 'text',
       help_text: '',
+      placeholder: '',
       is_required: true,
       is_active: true,
       persist_annually: false,
@@ -857,6 +859,152 @@ export default function ApplicationBuilderPage() {
     }));
   };
 
+  // Export application structure to CSV
+  const exportToCSV = () => {
+    // CSV header row
+    const headers = [
+      'Section Title',
+      'Section Order',
+      'Section Description',
+      'Section Status Visibility',
+      'Question Order',
+      'Question Text',
+      'Question Type',
+      'Help Text',
+      'Placeholder Text',
+      'Description',
+      'Options (comma-separated)',
+      'Is Required',
+      'Is Active',
+      'Persist Annually',
+      'Conditional: Show If Question',
+      'Conditional: Show If Answer',
+      'Detail Prompt Triggers',
+      'Detail Prompt Text',
+      'Question ID'
+    ];
+
+    // Helper to escape CSV values
+    const escapeCSV = (value: string | undefined | null): string => {
+      if (value === null || value === undefined) return '';
+      const stringValue = String(value);
+      // If contains comma, newline, or quote, wrap in quotes and escape internal quotes
+      if (stringValue.includes(',') || stringValue.includes('\n') || stringValue.includes('"')) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
+      }
+      return stringValue;
+    };
+
+    // Helper to find question text by ID
+    const findQuestionTextById = (questionId: string | null | undefined): string => {
+      if (!questionId) return '';
+      for (const section of sections) {
+        const question = section.questions.find(q => q.id === questionId);
+        if (question) {
+          return `[${section.title}] ${question.question_text}`;
+        }
+      }
+      return questionId; // Fallback to ID if not found
+    };
+
+    // Helper to format question type for readability
+    const formatQuestionType = (type: string): string => {
+      const typeMap: Record<string, string> = {
+        'text': 'Short Text',
+        'textarea': 'Long Text',
+        'dropdown': 'Dropdown',
+        'multiple_choice': 'Multiple Choice',
+        'checkbox': 'Checkboxes',
+        'file_upload': 'File Upload',
+        'profile_picture': 'Profile Picture',
+        'medication_list': 'Medication List',
+        'allergy_list': 'Allergy List',
+        'table': 'Generic Table',
+        'date': 'Date',
+        'email': 'Email',
+        'phone': 'Phone',
+        'signature': 'Signature'
+      };
+      return typeMap[type] || type;
+    };
+
+    // Helper to format status visibility
+    const formatStatusVisibility = (status: string | null | undefined): string => {
+      if (!status || status === 'all') return 'All (Applicants & Campers)';
+      if (status === 'applicant') return 'Applicants Only';
+      if (status === 'camper') return 'Campers Only';
+      return status;
+    };
+
+    // Build CSV rows
+    const rows: string[][] = [];
+
+    // Sort sections by order_index
+    const sortedSections = [...sections].sort((a, b) => a.order_index - b.order_index);
+
+    for (const section of sortedSections) {
+      // Sort questions by order_index
+      const sortedQuestions = [...section.questions].sort((a, b) => a.order_index - b.order_index);
+
+      if (sortedQuestions.length === 0) {
+        // Section with no questions - still include it
+        rows.push([
+          escapeCSV(section.title),
+          String(section.order_index),
+          escapeCSV(section.description),
+          formatStatusVisibility(section.required_status),
+          '', // Question Order
+          '(No questions in this section)',
+          '', '', '', '', '', '', '', '', '', '', '', '', ''
+        ]);
+      } else {
+        for (const question of sortedQuestions) {
+          rows.push([
+            escapeCSV(section.title),
+            String(section.order_index),
+            escapeCSV(section.description),
+            formatStatusVisibility(section.required_status),
+            String(question.order_index),
+            escapeCSV(question.question_text),
+            formatQuestionType(question.question_type),
+            escapeCSV(question.help_text),
+            escapeCSV(question.placeholder),
+            escapeCSV(question.description),
+            escapeCSV(Array.isArray(question.options) ? question.options.join('; ') : ''),
+            question.is_required ? 'Yes' : 'No',
+            question.is_active ? 'Yes' : 'No',
+            question.persist_annually ? 'Yes' : 'No',
+            escapeCSV(findQuestionTextById(question.show_if_question_id)),
+            escapeCSV(question.show_if_answer),
+            escapeCSV(Array.isArray(question.detail_prompt_trigger) ? question.detail_prompt_trigger.join('; ') : ''),
+            escapeCSV(question.detail_prompt_text),
+            question.id
+          ]);
+        }
+      }
+    }
+
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    // Create and trigger download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `application-structure-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast.success('Application structure exported to CSV');
+  };
+
   // Helper function to get conditional logic information for a question
   const getConditionalLogicInfo = (question: Question) => {
     console.log('Checking conditional logic for:', question.question_text, {
@@ -905,10 +1053,20 @@ export default function ApplicationBuilderPage() {
             Configure application sections and questions
           </p>
         </div>
-        <Button onClick={handleCreateSection}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Section
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={exportToCSV}
+            className="border-camp-green text-camp-green hover:bg-camp-green hover:text-white transition-colors"
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export to CSV
+          </Button>
+          <Button onClick={handleCreateSection}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Section
+          </Button>
+        </div>
       </div>
 
       {saveStatus === 'success' && (
@@ -1452,6 +1610,26 @@ export default function ApplicationBuilderPage() {
                 rows={2}
               />
             </div>
+
+            {/* Placeholder Text - Only for text-based input types */}
+            {['text', 'textarea', 'email', 'phone'].includes(questionForm.question_type || '') && (
+              <div className="space-y-2">
+                <Label htmlFor="placeholder-text">
+                  Placeholder Text
+                  <span className="text-xs text-muted-foreground ml-2">Optional - Grey text shown inside empty input</span>
+                </Label>
+                <Input
+                  id="placeholder-text"
+                  value={questionForm.placeholder || ''}
+                  onChange={(e) => setQuestionForm(prev => ({ ...prev, placeholder: e.target.value }))}
+                  placeholder={
+                    questionForm.question_type === 'email' ? 'e.g., your.email@example.com' :
+                    questionForm.question_type === 'phone' ? 'e.g., (555) 123-4567' :
+                    'e.g., Enter your response here...'
+                  }
+                />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="description">

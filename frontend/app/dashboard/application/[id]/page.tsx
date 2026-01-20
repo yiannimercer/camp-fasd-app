@@ -66,6 +66,7 @@ export default function ApplicationWizardPage() {
   const [medications, setMedications] = useState<Record<string, Medication[]>>({}) // questionId -> medications
   const [allergies, setAllergies] = useState<Record<string, Allergy[]>>({}) // questionId -> allergies
   const [tableData, setTableData] = useState<Record<string, TableRow[]>>({}) // questionId -> table rows
+  const [dragOverQuestionId, setDragOverQuestionId] = useState<string | null>(null) // Track which upload area is being dragged over
 
   // Track unsaved changes for immediate save on page unload
   const hasUnsavedChanges = useRef(false)
@@ -82,6 +83,14 @@ export default function ApplicationWizardPage() {
       localStorage.setItem(`app_section_${applicationId}`, currentSectionIndex.toString())
     }
   }, [currentSectionIndex, applicationId])
+
+  // Scroll to top when section changes (for better UX when navigating between sections)
+  useEffect(() => {
+    // Only scroll if not the initial load (sections are loaded)
+    if (sections.length > 0) {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }, [currentSectionIndex])
 
   // Load sections, progress, and existing responses
   useEffect(() => {
@@ -536,6 +545,62 @@ export default function ApplicationWizardPage() {
     } catch (error) {
       console.error('File deletion failed:', error)
       toast.error('Failed to delete file. Please try again.')
+    }
+  }
+
+  // Drag and drop handlers for file upload areas
+  const handleDragOver = (e: React.DragEvent, questionId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOverQuestionId(questionId)
+  }
+
+  const handleDragEnter = (e: React.DragEvent, questionId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOverQuestionId(questionId)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOverQuestionId(null)
+  }
+
+  const handleDrop = (e: React.DragEvent, questionId: string, acceptedTypes?: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOverQuestionId(null)
+
+    const files = e.dataTransfer.files
+    if (files && files.length > 0) {
+      const file = files[0]
+
+      // Validate file type if acceptedTypes is provided
+      if (acceptedTypes) {
+        const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
+        const acceptedList = acceptedTypes.split(',').map(t => t.trim().toLowerCase())
+        const isValidType = acceptedList.some(type => {
+          // Handle wildcard like "image/*"
+          if (type.includes('/*')) {
+            const category = type.split('/')[0]
+            return file.type.startsWith(category + '/')
+          }
+          // Handle extension like ".pdf"
+          if (type.startsWith('.')) {
+            return fileExtension === type
+          }
+          // Handle mime type like "image/png"
+          return file.type === type
+        })
+
+        if (!isValidType) {
+          toast.error(`Invalid file type. Please upload: ${acceptedTypes}`)
+          return
+        }
+      }
+
+      handleFileUpload(questionId, file)
     }
   }
 
@@ -1412,8 +1477,18 @@ export default function ApplicationWizardPage() {
                             </div>
                           </div>
                         ) : (
-                          // Show upload area
-                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-camp-green transition-colors">
+                          // Show upload area with drag & drop support
+                          <div
+                            className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                              dragOverQuestionId === question.id
+                                ? 'border-camp-green bg-camp-green/10'
+                                : 'border-gray-300 hover:border-camp-green'
+                            }`}
+                            onDragOver={(e) => handleDragOver(e, question.id)}
+                            onDragEnter={(e) => handleDragEnter(e, question.id)}
+                            onDragLeave={handleDragLeave}
+                            onDrop={(e) => handleDrop(e, question.id, '.pdf,.doc,.docx,.jpg,.jpeg,.png')}
+                          >
                             <input
                               type="file"
                               accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
@@ -1439,6 +1514,15 @@ export default function ApplicationWizardPage() {
                                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
                                     </svg>
                                     <p className="mt-2 text-sm text-camp-green">Uploading...</p>
+                                  </>
+                                ) : dragOverQuestionId === question.id ? (
+                                  <>
+                                    <svg className="mx-auto h-12 w-12 text-camp-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                    </svg>
+                                    <p className="mt-2 text-sm font-medium text-camp-green">
+                                      Drop file here
+                                    </p>
                                   </>
                                 ) : (
                                   <>
@@ -1553,8 +1637,18 @@ export default function ApplicationWizardPage() {
                             </div>
                           </div>
                         ) : (
-                          // Show upload area
-                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-camp-green transition-colors">
+                          // Show upload area with drag & drop support
+                          <div
+                            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                              dragOverQuestionId === question.id
+                                ? 'border-camp-green bg-camp-green/10'
+                                : 'border-gray-300 hover:border-camp-green'
+                            }`}
+                            onDragOver={(e) => handleDragOver(e, question.id)}
+                            onDragEnter={(e) => handleDragEnter(e, question.id)}
+                            onDragLeave={handleDragLeave}
+                            onDrop={(e) => handleDrop(e, question.id, 'image/*,.jpg,.jpeg,.png,.gif')}
+                          >
                             <input
                               type="file"
                               accept="image/*,.jpg,.jpeg,.png,.gif"
@@ -1580,6 +1674,17 @@ export default function ApplicationWizardPage() {
                                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
                                     </svg>
                                     <p className="mt-3 text-sm text-camp-green font-medium">Uploading Photo...</p>
+                                  </>
+                                ) : dragOverQuestionId === question.id ? (
+                                  <>
+                                    <div className="mx-auto h-20 w-20 rounded-full bg-camp-green/20 flex items-center justify-center mb-4">
+                                      <svg className="h-10 w-10 text-camp-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                      </svg>
+                                    </div>
+                                    <p className="mt-2 text-base font-medium text-camp-green">
+                                      Drop photo here
+                                    </p>
                                   </>
                                 ) : (
                                   <>
