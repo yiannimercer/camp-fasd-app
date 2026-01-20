@@ -179,6 +179,7 @@ export default function ApplicationBuilderPage() {
     question_text: '',
     question_type: 'text' as Question['question_type'],
     help_text: '',
+    placeholder: '',
     is_required: true,
     is_active: true,
     persist_annually: false,
@@ -297,6 +298,7 @@ export default function ApplicationBuilderPage() {
       question_text: '',
       question_type: 'text',
       help_text: '',
+      placeholder: '',
       is_required: true,
       is_active: true,
       persist_annually: false,
@@ -1452,6 +1454,26 @@ export default function ApplicationBuilderPage() {
                 rows={2}
               />
             </div>
+
+            {/* Placeholder Text - Only for text-based input types */}
+            {['text', 'textarea', 'email', 'phone'].includes(questionForm.question_type || '') && (
+              <div className="space-y-2">
+                <Label htmlFor="placeholder-text">
+                  Placeholder Text
+                  <span className="text-xs text-muted-foreground ml-2">Optional - Grey text shown inside empty input</span>
+                </Label>
+                <Input
+                  id="placeholder-text"
+                  value={questionForm.placeholder || ''}
+                  onChange={(e) => setQuestionForm(prev => ({ ...prev, placeholder: e.target.value }))}
+                  placeholder={
+                    questionForm.question_type === 'email' ? 'e.g., your.email@example.com' :
+                    questionForm.question_type === 'phone' ? 'e.g., (555) 123-4567' :
+                    'e.g., Enter your response here...'
+                  }
+                />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="description">
