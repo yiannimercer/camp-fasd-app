@@ -62,6 +62,41 @@ function SidebarNav() {
   )
 }
 
+// Mobile/Tablet horizontal navigation - shows below lg breakpoint
+function MobileNav() {
+  const pathname = usePathname()
+
+  return (
+    <nav className="lg:hidden border-b bg-white px-4 py-2">
+      <div className="flex gap-2">
+        {navigationItems.map((item) => {
+          const isActive = item.href === '/admin'
+            ? pathname === '/admin'
+            : pathname?.startsWith(item.href)
+          const IconComponent = item.icon
+
+          return (
+            <Link
+              key={item.name}
+              href={item.href}
+              className={`
+                flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all
+                ${isActive
+                  ? 'bg-camp-green text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+                }
+              `}
+            >
+              <IconComponent className="h-4 w-4" />
+              {item.name}
+            </Link>
+          )
+        })}
+      </div>
+    </nav>
+  )
+}
+
 export default function AdminLayout({
   children,
 }: {
@@ -96,9 +131,12 @@ export default function AdminLayout({
     <div className="min-h-screen bg-gray-50">
       <AppHeader currentView="admin" />
 
+      {/* Mobile/Tablet Navigation - Shows below lg breakpoint */}
+      <MobileNav />
+
       <div className="px-4 py-8">
         <div className="flex gap-6">
-          {/* Side Navigation - Hidden on medium screens, shown on large */}
+          {/* Side Navigation - Hidden below lg breakpoint */}
           {/* When viewing application details, the sections sidebar takes priority */}
           <div className="hidden lg:block w-52 flex-shrink-0">
             <div className="sticky top-24">
