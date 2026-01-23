@@ -1088,7 +1088,7 @@ export default function EmailCommunicationPage() {
                       <SelectValue placeholder="Select template..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {templates.map((t) => (
+                      {templates.filter((t) => t.is_active).map((t) => (
                         <SelectItem key={t.key} value={t.key}>
                           {t.name}
                         </SelectItem>
@@ -1281,6 +1281,12 @@ export default function EmailCommunicationPage() {
           url: d.url || '',
         }))}
         onLoadDocuments={loadDocuments}
+        automations={automations.map(a => ({
+          id: a.id,
+          name: a.name,
+          template_key: a.template_key,
+          is_active: a.is_active,
+        }))}
       />
 
       {/* Delete Automation Confirmation Modal */}
