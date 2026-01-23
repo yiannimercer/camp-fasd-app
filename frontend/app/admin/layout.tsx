@@ -98,8 +98,9 @@ export default function AdminLayout({
 
       <div className="px-4 py-8">
         <div className="flex gap-6">
-          {/* Side Navigation */}
-          <div className="w-52 flex-shrink-0">
+          {/* Side Navigation - Hidden on medium screens, shown on large */}
+          {/* When viewing application details, the sections sidebar takes priority */}
+          <div className="hidden lg:block w-52 flex-shrink-0">
             <div className="sticky top-24">
               <SidebarNav />
             </div>

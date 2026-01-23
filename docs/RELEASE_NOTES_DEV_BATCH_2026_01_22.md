@@ -13,9 +13,10 @@ This document summarizes all unstaged changes currently in the development branc
 1. [Initiative 1: Security Hardening](#initiative-1-security-hardening)
 2. [Initiative 2: Scheduled Email Automations](#initiative-2-scheduled-email-automations)
 3. [Initiative 3: Bug Fixes & Minor Improvements](#initiative-3-bug-fixes--minor-improvements)
-4. [Pre-Deployment Checklist](#pre-deployment-checklist)
-5. [Testing Plan](#testing-plan)
-6. [Rollback Plan](#rollback-plan)
+4. [Initiative 4: Admin Dashboard & UI Fixes](#initiative-4-admin-dashboard--ui-fixes)
+5. [Pre-Deployment Checklist](#pre-deployment-checklist)
+6. [Testing Plan](#testing-plan)
+7. [Rollback Plan](#rollback-plan)
 
 ---
 
@@ -137,7 +138,7 @@ This initiative makes scheduled automations **data-driven** - they now read from
 | `backend/app/models/super_admin.py` | Added `last_sent_at` column to `EmailAutomation` model |
 | `backend/vercel.json` | Changed cron from weekly (`0 9 * * 1`) to hourly (`0 * * * *`) |
 | `frontend/lib/api-super-admin.ts` | Added `last_sent_at` to `EmailAutomation` interface |
-| `frontend/app/super-admin/email-communication/page.tsx` | Shows last sent time for scheduled automations, UTC note |
+| `frontend/app/super-admin/email-communication/page.tsx` | Shows last sent time for scheduled automations, Central time note |
 
 ### How It Works
 
@@ -145,11 +146,18 @@ This initiative makes scheduled automations **data-driven** - they now read from
 2. **Query Due Automations:** Service queries `email_automations` where:
    - `trigger_type = 'scheduled'`
    - `is_active = true`
-   - `schedule_day` matches current UTC day (0=Sunday, 6=Saturday)
-   - `schedule_hour` matches current UTC hour (0-23)
+   - `schedule_day` matches current **Chicago time** day (0=Sunday, 6=Saturday)
+   - `schedule_hour` matches current **Chicago time** hour (0-23)
    - `last_sent_at` is null OR > 7 days ago
 3. **Send Emails:** For each automation, get recipients via `audience_filter`, send template emails
 4. **Update Tracking:** Set `last_sent_at` to prevent duplicate sends
+
+### Timezone Configuration
+
+**All scheduled automations use America/Chicago (Central Time).** This means:
+- 9 AM in the UI = 9 AM Central, regardless of whether Chicago is in CST or CDT
+- The backend uses Python's `zoneinfo.ZoneInfo("America/Chicago")` which handles DST automatically
+- No user action required during daylight saving transitions
 
 ### Day of Week Mapping
 
@@ -176,7 +184,7 @@ WHERE trigger_type = 'scheduled' AND is_active = true;
 ```
 
 **037: Seed defaults**
-- Updates existing scheduled automations with `schedule_day=1` (Monday), `schedule_hour=9` (9 AM UTC)
+- Updates existing scheduled automations with `schedule_day=1` (Monday), `schedule_hour=9` (9 AM Central)
 - Creates automations if they don't exist (for fresh installs)
 - Adds documentation comments to columns
 
@@ -192,11 +200,48 @@ WHERE trigger_type = 'scheduled' AND is_active = true;
 
 The email queue table was created without the `updated_at` column that triggers expected. This migration adds it.
 
-### Other Minor Changes
+---
+
+## Initiative 4: Admin Dashboard & UI Fixes
+
+### Files Modified
 
 | File | Change |
 |------|--------|
-| `run-email-queue-fix.js` | Utility script for running the email queue migration |
+| `frontend/app/admin/page.tsx` | Changed "Total Applications" to "Active Families" (applicants + campers only) |
+| `frontend/app/admin/layout.tsx` | Fixed sidebar visibility: admin nav now hidden until `lg` breakpoint |
+| `frontend/app/admin/applications/[id]/page.tsx` | Section sidebar now shows at `md` breakpoint (was `lg`) |
+| `frontend/app/super-admin/email-communication/page.tsx` | Updated timezone labels from "UTC" to "Central" |
+| `backend/app/services/scheduled_emails.py` | Changed timezone from UTC to America/Chicago |
+
+### 1. Admin Dashboard Metric Fix
+
+**Problem:** "Total Applications" count included all statuses, which was misleading.
+
+**Solution:**
+- Renamed to **"Active Families"**
+- Now only counts applications with status `applicant` or `camper`
+- Excludes inactive statuses (withdrawn, rejected, etc.)
+- Added subtitle "Applicants & Campers" for clarity
+
+### 2. Responsive Sidebar Priority Fix
+
+**Problem:** On medium-width screens (tablets/small laptops), the admin navigation sidebar competed with the application sections sidebar, causing layout issues.
+
+**Solution:**
+- **Admin nav sidebar:** Now `hidden lg:block` (only shows on large screens 1024px+)
+- **Sections sidebar:** Now `hidden md:block` (shows on medium screens 768px+)
+- This ensures sections sidebar takes priority when space is limited
+
+### 3. Scheduled Email Timezone Fix
+
+**Problem:** Scheduled email times were in UTC, which was confusing for Chicago-based camp staff.
+
+**Solution:**
+- Backend now uses `America/Chicago` timezone (Central Time)
+- Python's `zoneinfo` module handles CST/CDT transitions automatically
+- UI labels updated from "(UTC)" to "(Central)"
+- No changes needed for existing automations - times will now be interpreted as Central
 
 ---
 
@@ -434,9 +479,9 @@ See `docs/SECURITY_REMEDIATION.md` for remaining security items:
 ## Change Statistics
 
 ```
-25 files changed, 454 insertions(+), 111 deletions(-)
+28 files changed, ~500 insertions(+), ~120 deletions(-)
 ```
 
 **New Files:** 9
-**Modified Files:** 16
+**Modified Files:** 19
 **Migrations:** 3

@@ -6,11 +6,14 @@ super admin UI. Unlike event-based automations which fire immediately when an
 event occurs, scheduled automations run at specific times (day + hour).
 
 The cron job calls process_all_due_automations() hourly, which:
-1. Determines the current UTC day/hour
+1. Determines the current day/hour in America/Chicago timezone (CST/CDT)
 2. Queries email_automations table for matching scheduled automations
 3. Filters out recently-run automations (using last_sent_at)
 4. Sends emails to recipients based on audience_filter
 5. Updates last_sent_at to prevent duplicates
+
+TIMEZONE: All schedule_day and schedule_hour values are interpreted as
+America/Chicago (Central Time). This automatically handles CST/CDT transitions.
 
 Day of Week Mapping:
     Database (matching frontend UI):
@@ -21,6 +24,7 @@ Day of Week Mapping:
 """
 
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from typing import List, Dict, Any, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
@@ -34,6 +38,10 @@ from app.services import email_service
 from app.services.email_events import get_recipients_for_automation, build_email_context
 
 logger = logging.getLogger(__name__)
+
+# Timezone for scheduled automations - Central Time (Chicago)
+# This automatically handles CST (UTC-6) and CDT (UTC-5) transitions
+SCHEDULE_TIMEZONE = ZoneInfo("America/Chicago")
 
 
 def python_weekday_to_db_day(python_weekday: int) -> int:
@@ -63,8 +71,8 @@ def get_due_scheduled_automations(
 
     Args:
         db: Database session
-        current_day: Day of week (0=Sunday, 6=Saturday)
-        current_hour: Hour of day (0-23 in UTC)
+        current_day: Day of week (0=Sunday, 6=Saturday) in Chicago time
+        current_hour: Hour of day (0-23) in Chicago time
         min_interval_hours: Minimum hours between runs (default ~7 days for weekly)
 
     Returns:
@@ -244,6 +252,10 @@ async def process_all_due_automations(
 
     Called by the cron job endpoint hourly.
 
+    IMPORTANT: All schedule matching is done in America/Chicago timezone (CST/CDT).
+    This means schedule_day=1 (Monday), schedule_hour=9 will run at 9 AM Chicago time,
+    regardless of whether Chicago is in CST (UTC-6) or CDT (UTC-5).
+
     Args:
         db: Database session
         camp_year: Current camp year from system configuration
@@ -251,22 +263,24 @@ async def process_all_due_automations(
     Returns:
         Dict with overall results including list of processed automations
     """
-    now = datetime.now(timezone.utc)
-    current_hour = now.hour
-    current_day = python_weekday_to_db_day(now.weekday())
+    # Get current time in Chicago timezone (CST/CDT)
+    now_chicago = datetime.now(SCHEDULE_TIMEZONE)
+    current_hour = now_chicago.hour
+    current_day = python_weekday_to_db_day(now_chicago.weekday())
 
     logger.info(
         f"Processing scheduled automations: "
-        f"UTC time={now.isoformat()}, day={current_day}, hour={current_hour}"
+        f"Chicago time={now_chicago.isoformat()}, day={current_day}, hour={current_hour}"
     )
 
     # Get all due automations
     automations = get_due_scheduled_automations(db, current_day, current_hour)
 
     results = {
-        'timestamp': now.isoformat(),
-        'utc_day': current_day,
-        'utc_hour': current_hour,
+        'timestamp': now_chicago.isoformat(),
+        'timezone': 'America/Chicago',
+        'chicago_day': current_day,
+        'chicago_hour': current_hour,
         'automations_found': len(automations),
         'automations_processed': [],
         'total_sent': 0,

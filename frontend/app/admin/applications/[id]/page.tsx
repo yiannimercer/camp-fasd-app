@@ -995,7 +995,8 @@ export default function AdminApplicationDetailPage() {
       {/* Main Content with Sidebar */}
       <div className="flex">
         {/* Left Sidebar - Section Progress */}
-        <aside className="w-64 bg-white border-r border-gray-200 sticky top-16 h-[calc(100vh-4rem)] overflow-y-auto">
+        {/* Hidden on mobile, visible on md+ screens (prioritized over admin nav on md screens) */}
+        <aside className="hidden md:block w-64 bg-white border-r border-gray-200 sticky top-16 h-[calc(100vh-4rem)] overflow-y-auto">
           <div className="p-4">
             <h3 className="text-sm font-semibold text-camp-charcoal mb-4">Sections</h3>
             <div className="space-y-2">

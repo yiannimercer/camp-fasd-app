@@ -765,7 +765,7 @@ export default function EmailCommunicationPage() {
                                     <strong>Schedule:</strong>{' '}
                                     {DAYS_OF_WEEK.find(d => d.value === automation.schedule_day)?.label} at{' '}
                                     {HOUR_OPTIONS.find(h => h.value === automation.schedule_hour)?.label}
-                                    <span className="text-xs text-muted-foreground ml-1">(UTC)</span>
+                                    <span className="text-xs text-muted-foreground ml-1">(Central)</span>
                                   </span>
                                   {automation.last_sent_at && (
                                     <span className="text-green-600">
@@ -1186,7 +1186,7 @@ export default function EmailCommunicationPage() {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Time (UTC)</Label>
+                      <Label>Time (Central)</Label>
                       <Select
                         value={String(editingAutomation.schedule_hour ?? 9)}
                         onValueChange={(value) => setEditingAutomation({ ...editingAutomation, schedule_hour: parseInt(value) })}
@@ -1205,7 +1205,7 @@ export default function EmailCommunicationPage() {
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Times are in UTC. Example: 9:00 AM UTC = 4:00 AM Central (CST) / 5:00 AM Central (CDT)
+                    Times are in Central Time (Chicago). CST/CDT transitions are handled automatically.
                   </p>
                 </div>
               )}

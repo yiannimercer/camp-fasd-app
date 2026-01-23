@@ -92,6 +92,7 @@ export default function AdminDashboard() {
 
     return {
       total,
+      activeFamilies: applicants.length + campers.length, // Only applicants + campers (excludes inactive)
       applicantCount: applicants.length,
       camperCount: campers.length,
       inactiveCount: inactive.length,
@@ -153,7 +154,7 @@ export default function AdminDashboard() {
           Summary
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Total Applications */}
+          {/* Active Families (Applicants + Campers) */}
           <Card
             className="cursor-pointer hover:shadow-lg hover:border-gray-300 transition-all group bg-gradient-to-br from-gray-50 to-gray-100 border-2"
             onClick={() => navigateWithFilter('')}
@@ -162,14 +163,15 @@ export default function AdminDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-4xl font-bold text-gray-900 group-hover:text-camp-green transition-colors">
-                    {stats.total}
+                    {stats.activeFamilies}
                   </div>
-                  <div className="text-sm font-medium text-gray-600 mt-1">Total Applications</div>
+                  <div className="text-sm font-medium text-gray-600 mt-1">Active Families</div>
+                  <div className="text-xs text-gray-400 mt-0.5">Applicants & Campers</div>
                 </div>
                 <ClipboardList className="h-12 w-12 text-gray-300 group-hover:text-gray-400 transition-colors" />
               </div>
-              <div className="text-xs text-gray-400 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                View all applications →
+              <div className="text-xs text-gray-400 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                View all active →
               </div>
             </CardContent>
           </Card>
