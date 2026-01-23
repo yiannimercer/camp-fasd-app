@@ -1133,7 +1133,7 @@ export default function AdminApplicationDetailPage() {
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-8">
           {/* Sticky Camper Info Card */}
           {application && (application.camper_first_name || application.camper_last_name) && (
-            <div className="sticky top-0 z-10 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 mb-6 bg-white/95 backdrop-blur-sm border-b shadow-sm">
+            <div className="sticky top-16 z-10 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 mb-6 bg-white/95 backdrop-blur-sm border-b shadow-sm">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <Avatar className="h-12 w-12 border-2 border-camp-green shadow-md">
