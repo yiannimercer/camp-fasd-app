@@ -1,8 +1,15 @@
 /**
  * API client for application-related endpoints
+ *
+ * Security: All state-changing requests include X-Requested-With header for CSRF protection.
  */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
+// CSRF protection header required for state-changing requests
+const CSRF_HEADER = {
+  'X-Requested-With': 'XMLHttpRequest',
+}
 
 // Types
 // Section header for grouping questions within a section
@@ -147,6 +154,7 @@ export async function createApplication(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(data),
   })
@@ -212,6 +220,7 @@ export async function updateApplication(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(data),
   })
@@ -258,6 +267,7 @@ export async function reactivateApplication(
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 
@@ -287,6 +297,7 @@ export async function withdrawApplication(
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 

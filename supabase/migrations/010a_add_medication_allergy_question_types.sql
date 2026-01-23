@@ -1,10 +1,10 @@
--- Add medication_list and allergy_list to question_type check constraint
--- Migration: 009_add_medication_allergy_question_types
+-- Add medication_list, allergy_list, and table to question_type check constraint
+-- Migration: 010a_add_medication_allergy_question_types
 
 -- Drop the existing check constraint
 ALTER TABLE application_questions DROP CONSTRAINT IF EXISTS application_questions_question_type_check;
 
--- Add the new check constraint with medication_list and allergy_list included
+-- Add the new check constraint with all custom question types
 ALTER TABLE application_questions
 ADD CONSTRAINT application_questions_question_type_check
 CHECK (question_type IN (
@@ -17,10 +17,11 @@ CHECK (question_type IN (
   'profile_picture',
   'medication_list',
   'allergy_list',
+  'table',
   'date',
   'email',
   'phone',
   'signature'
 ));
 
-COMMENT ON CONSTRAINT application_questions_question_type_check ON application_questions IS 'Ensures question_type is one of the allowed values including medication_list and allergy_list';
+COMMENT ON CONSTRAINT application_questions_question_type_check ON application_questions IS 'Ensures question_type is one of the allowed values including medication_list, allergy_list, and table';

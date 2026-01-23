@@ -33,6 +33,10 @@ email-validator==2.1.0.post1
 python-dateutil==2.8.2
 aiofiles==23.2.1
 
+# Security
+slowapi>=0.1.9          # Rate limiting
+python-magic>=0.4.27    # File type validation via magic bytes
+
 # Development
 pytest==7.4.4
 pytest-asyncio==0.23.3

@@ -4,6 +4,11 @@
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
+// CSRF protection header required for state-changing requests
+const CSRF_HEADER = {
+  'X-Requested-With': 'XMLHttpRequest',
+}
+
 // Types
 export interface EmailTemplate {
   id: string
@@ -129,6 +134,7 @@ export async function sendTestEmail(token: string, toEmail: string): Promise<Sen
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 
@@ -154,6 +160,7 @@ export async function sendAdHocEmail(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify({
       application_id: applicationId,
@@ -230,6 +237,7 @@ export async function sendMassEmail(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(data),
   })
@@ -356,6 +364,7 @@ export async function processQueue(
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 
@@ -377,6 +386,7 @@ export async function cancelQueuedEmail(
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 
@@ -414,6 +424,7 @@ export async function previewEmail(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify({
       subject,
@@ -485,6 +496,7 @@ export async function sendDeliverabilityTestEmail(token: string): Promise<{
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 
@@ -508,6 +520,7 @@ export async function confirmEmailDeliverability(token: string): Promise<{
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 
@@ -583,6 +596,7 @@ export async function uploadEmailDocument(
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: formData,
   })
@@ -606,6 +620,7 @@ export async function deleteEmailDocument(
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 

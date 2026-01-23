@@ -4,6 +4,11 @@
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+// CSRF protection header required for state-changing requests
+const CSRF_HEADER = {
+  'X-Requested-With': 'XMLHttpRequest',
+}
+
 export interface Question {
   id: string;
   section_id: string;
@@ -153,6 +158,7 @@ export async function createSection(token: string, section: SectionCreate): Prom
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(section),
   });
@@ -172,6 +178,7 @@ export async function updateSection(token: string, sectionId: string, section: S
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(section),
   });
@@ -190,6 +197,7 @@ export async function deleteSection(token: string, sectionId: string): Promise<v
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   });
 
@@ -206,6 +214,7 @@ export async function reorderSections(token: string, sectionIds: string[]): Prom
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(sectionIds),
   });
@@ -223,6 +232,7 @@ export async function createQuestion(token: string, question: QuestionCreate): P
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(question),
   });
@@ -243,6 +253,7 @@ export async function updateQuestion(token: string, questionId: string, question
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(question),
   });
@@ -262,6 +273,7 @@ export async function deleteQuestion(token: string, questionId: string): Promise
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   });
 
@@ -277,6 +289,7 @@ export async function duplicateQuestion(token: string, questionId: string): Prom
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   });
 
@@ -295,6 +308,7 @@ export async function reorderQuestions(token: string, items: { id: string; order
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(items),
   });
@@ -314,6 +328,7 @@ export async function createHeader(token: string, header: HeaderCreate): Promise
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(header),
   });
@@ -333,6 +348,7 @@ export async function updateHeader(token: string, headerId: string, header: Head
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(header),
   });
@@ -351,6 +367,7 @@ export async function deleteHeader(token: string, headerId: string): Promise<voi
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   });
 
@@ -367,6 +384,7 @@ export async function reorderHeaders(token: string, items: { id: string; order_i
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(items),
   });

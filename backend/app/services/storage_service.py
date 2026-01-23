@@ -1,12 +1,15 @@
 """
 Supabase Storage Service
 Handles file uploads and downloads to Supabase Storage
+
+Security: All filenames are sanitized to prevent path traversal attacks.
 """
 
 import re
 from typing import BinaryIO, Optional, Union
 from supabase import create_client, Client
 from ..core.config import get_settings
+from ..core.security_utils import generate_safe_storage_path, is_path_traversal_attempt
 
 settings = get_settings()
 
@@ -131,9 +134,18 @@ def upload_file(
     # Ensure bucket exists
     ensure_bucket_exists()
 
-    # Generate unique file path
-    # Format: applications/{application_id}/{question_id}/{filename}
-    file_path = f"applications/{application_id}/{question_id}/{filename}"
+    # Security: Generate sanitized file path to prevent path traversal attacks
+    # The original filename is sanitized and prefixed with a UUID for uniqueness
+    file_path = generate_safe_storage_path(
+        application_id=application_id,
+        question_id=question_id,
+        original_filename=filename,
+        add_uuid_prefix=True
+    )
+
+    # Additional security check for path traversal attempts
+    if is_path_traversal_attempt(filename):
+        raise Exception(f"Invalid filename: potential path traversal detected")
 
     if isinstance(file, (bytes, bytearray)):
         file_bytes = file
@@ -157,10 +169,10 @@ def upload_file(
         # Upload file to Supabase Storage
         _upload_once(file_bytes)
 
-        # Get signed URL (valid for 1 year)
+        # Get signed URL (valid for 1 hour - security: shorter expiration reduces exposure window)
         signed_url = supabase.storage.from_(BUCKET_NAME).create_signed_url(
             file_path,
-            expires_in=31536000  # 1 year in seconds
+            expires_in=3600  # 1 hour in seconds
         )
 
         return {
@@ -178,7 +190,7 @@ def upload_file(
                 _upload_once(file_bytes)
                 signed_url = supabase.storage.from_(BUCKET_NAME).create_signed_url(
                     file_path,
-                    expires_in=31536000
+                    expires_in=3600  # 1 hour
                 )
                 return {
                     "path": file_path,

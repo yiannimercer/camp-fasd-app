@@ -95,6 +95,7 @@ class EmailAutomation(Base):
     schedule_hour = Column(Integer)  # 0-23
     audience_filter = Column(JSONB, default={})  # Filter criteria for recipients
     is_active = Column(Boolean, default=True, index=True)
+    last_sent_at = Column(DateTime(timezone=True))  # When automation last ran (for scheduled)
     created_at = Column(DateTime(timezone=True), server_default=text("NOW()"))
     updated_at = Column(DateTime(timezone=True), server_default=text("NOW()"))
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))

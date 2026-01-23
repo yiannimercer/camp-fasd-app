@@ -17,8 +17,8 @@
       "schedule": "*/5 * * * *"
     },
     {
-      "path": "/api/cron/weekly-emails",
-      "schedule": "0 9 * * 1"
+      "path": "/api/cron/scheduled-automations",
+      "schedule": "0 * * * *"
     }
   ]
 }

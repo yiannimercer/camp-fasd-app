@@ -1,8 +1,15 @@
 /**
  * API client for super admin endpoints
+ *
+ * Security: All state-changing requests include X-Requested-With header for CSRF protection.
  */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
+// CSRF protection header required for state-changing requests
+const CSRF_HEADER = {
+  'X-Requested-With': 'XMLHttpRequest',
+}
 
 // ============================================================================
 // Types
@@ -124,6 +131,7 @@ export interface EmailAutomation {
   schedule_hour: number | null
   audience_filter: Record<string, any> | null
   is_active: boolean
+  last_sent_at: string | null  // When the scheduled automation last ran
   created_at: string
   updated_at: string
   created_by: string | null
@@ -241,6 +249,7 @@ export async function updateUser(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(data),
   })
@@ -264,6 +273,7 @@ export async function changeUserRole(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify({ role, team }),
   })
@@ -287,6 +297,7 @@ export async function suspendUser(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify({ status, reason }),
   })
@@ -353,6 +364,7 @@ export async function deleteUser(
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 
@@ -375,6 +387,7 @@ export async function resetUserPassword(
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 
@@ -398,6 +411,7 @@ export async function createUser(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(data),
   })
@@ -421,6 +435,7 @@ export async function resendInvitation(
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 
@@ -445,6 +460,7 @@ export async function sendDirectEmail(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(data),
   })
@@ -518,6 +534,7 @@ export async function updateConfiguration(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(data),
   })
@@ -589,6 +606,7 @@ export async function updateEmailTemplate(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(data),
   })
@@ -621,6 +639,7 @@ export async function createEmailTemplate(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(data),
   })
@@ -668,6 +687,7 @@ export async function createTeam(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(data),
   })
@@ -696,6 +716,7 @@ export async function updateTeam(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(data),
   })
@@ -806,6 +827,7 @@ export async function createEmailAutomation(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(data),
   })
@@ -838,6 +860,7 @@ export async function updateEmailAutomation(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(data),
   })
@@ -858,6 +881,7 @@ export async function deleteEmailAutomation(
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 
@@ -906,6 +930,7 @@ export async function deleteApplication(
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 

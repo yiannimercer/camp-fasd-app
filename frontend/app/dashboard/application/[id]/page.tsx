@@ -32,6 +32,7 @@ import AllergyList, { Allergy } from '@/components/AllergyList'
 import GenericTable, { TableRow } from '@/components/GenericTable'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeSanitize from 'rehype-sanitize'
 
 export default function ApplicationWizardPage() {
   const params = useParams()
@@ -1182,7 +1183,10 @@ export default function ApplicationWizardPage() {
 
                     {question.description && (
                       <div className="prose prose-sm max-w-none mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          rehypePlugins={[rehypeSanitize]}
+                        >
                           {question.description}
                         </ReactMarkdown>
                       </div>

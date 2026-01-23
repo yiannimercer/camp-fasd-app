@@ -12,13 +12,15 @@ class Settings(BaseSettings):
 
     # Application
     APP_NAME: str = "CAMP FASD Application Portal"
-    DEBUG: bool = True
+    # Security: In production, ensure DEBUG=false in environment variables
+    # Defaults to True for local development convenience
+    DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
     API_VERSION: str = "v1"
 
     # Security
     JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 2  # 2 hours (security: shorter tokens reduce attack window)
 
     # Database
     DATABASE_URL: str
@@ -40,6 +42,9 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""  # Will be set via environment variable
     RESEND_FROM_EMAIL: str = "apps@fasdcamp.org"
     RESEND_FROM_NAME: str = "CAMP - A FASD Community"
+
+    # Cron Job Security
+    CRON_SECRET: str = ""  # Required in production for cron job authentication
 
     # Frontend URL (differs per environment)
     # Local: http://localhost:3000, Dev: https://app-dev.fasdcamp.org, Prod: https://app.fasdcamp.org
@@ -63,6 +68,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # Allow extra env vars not defined in Settings
 
 
 settings = Settings()
