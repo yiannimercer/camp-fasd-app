@@ -19,6 +19,7 @@ import { getAdminNotes, createAdminNote, approveApplication, declineApplication,
 import { sendAdHocEmail } from '@/lib/api-emails'
 import { deleteApplication as deleteApplicationApi } from '@/lib/api-super-admin'
 import { Button } from '@/components/ui/button'
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDateCST } from '@/lib/date-utils'
@@ -94,6 +95,8 @@ export default function AdminApplicationDetailPage() {
   const [editAllergies, setEditAllergies] = useState<Allergy[]>([])
   const [editTableData, setEditTableData] = useState<TableRow[]>([])
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
+  // Camper profile picture for sticky header
+  const [profilePictureUrl, setProfilePictureUrl] = useState<string>('')
   // Delete application modal state (super admin only)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmStep, setDeleteConfirmStep] = useState(1)
@@ -274,6 +277,24 @@ export default function AdminApplicationDetailPage() {
 
     loadData()
   }, [token, applicationId])
+
+  // Extract profile picture URL when files and sections are loaded
+  useEffect(() => {
+    if (!sections.length || !Object.keys(files).length) return
+
+    // Find the profile_picture question across all sections
+    for (const section of sections) {
+      for (const question of section.questions) {
+        if (question.question_type === 'profile_picture') {
+          const fileInfo = files[question.id]
+          if (fileInfo?.url) {
+            setProfilePictureUrl(fileInfo.url)
+            return
+          }
+        }
+      }
+    }
+  }, [files, sections])
 
   // Load notes
   useEffect(() => {
@@ -1110,6 +1131,54 @@ export default function AdminApplicationDetailPage() {
 
         {/* Main Content Area */}
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-8">
+          {/* Sticky Camper Info Card */}
+          {application && (application.camper_first_name || application.camper_last_name) && (
+            <div className="sticky top-0 z-10 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 mb-6 bg-white/95 backdrop-blur-sm border-b shadow-sm">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-12 w-12 border-2 border-camp-green shadow-md">
+                    {profilePictureUrl ? (
+                      <AvatarImage src={profilePictureUrl} alt={`${application.camper_first_name} ${application.camper_last_name}`} />
+                    ) : null}
+                    <AvatarFallback className="bg-camp-green text-white font-bold text-lg">
+                      {`${application.camper_first_name?.charAt(0) || ''}${application.camper_last_name?.charAt(0) || ''}`.toUpperCase() || '?'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h1 className="text-xl font-bold text-camp-charcoal">
+                      {application.camper_first_name} {application.camper_last_name}
+                    </h1>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span
+                        className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full"
+                        style={getStatusStyle(application.status, application.sub_status)}
+                      >
+                        {getStatusColor(application.status, application.sub_status).label}
+                      </span>
+                      {application.is_returning_camper && (
+                        <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
+                          Returning Camper
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="hidden sm:flex items-center gap-4">
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500">Progress</p>
+                    <p className="text-lg font-bold text-camp-green">{application.completion_percentage}%</p>
+                  </div>
+                  <div className="w-24 bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-camp-green h-2 rounded-full transition-all"
+                      style={{ width: `${application.completion_percentage}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Application Info */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <Card>
