@@ -45,7 +45,7 @@ const nextConfig = {
               // Fonts: self and Google Fonts
               "font-src 'self' https://fonts.gstatic.com",
               // Connect: API backends and services
-              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://accounts.google.com https://api.stripe.com",
+              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://accounts.google.com https://api.stripe.com https://api.fasdcamp.org https://api-dev.fasdcamp.org",
               // Frames: Google OAuth and Stripe
               "frame-src 'self' https://accounts.google.com https://js.stripe.com",
               // Objects: none (no Flash/plugins)
