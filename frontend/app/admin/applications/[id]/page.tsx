@@ -966,10 +966,10 @@ export default function AdminApplicationDetailPage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       {/* Unified Sticky Header - Navigation + Camper Context */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-20">
-        {/* Top Bar - Back Navigation & User Actions */}
+        {/* Top Bar - Back Navigation */}
         <div className="border-b border-gray-100 bg-gray-50/80">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-12">
+            <div className="flex items-center h-11">
               {/* Back Button */}
               <button
                 onClick={() => router.push('/admin/applications')}
@@ -980,21 +980,6 @@ export default function AdminApplicationDetailPage() {
                 </svg>
                 <span className="font-medium">All Applications</span>
               </button>
-
-              {/* Right: User Actions */}
-              <div className="flex items-center gap-3">
-                <div className="hidden sm:flex items-center gap-2 text-sm text-gray-500">
-                  <span>{user?.first_name} {user?.last_name}</span>
-                  <span className="text-gray-300">•</span>
-                  <span className="capitalize">{user?.role?.replace('_', ' ')}</span>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
-                >
-                  Sign Out
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -1205,62 +1190,94 @@ export default function AdminApplicationDetailPage() {
 
         {/* Main Content Area */}
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-8">
-          {/* Application Info */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full"
-                  style={getCategoryStyle(application.status)}
-                >
-                  {getCategoryColor(application.status).label}
-                </span>
-                <span
-                  className="inline-flex px-2.5 py-1 text-sm font-semibold rounded-full"
-                  style={getStatusStyle(application.status, application.sub_status)}
-                >
-                  {getStatusColor(application.status, application.sub_status).label}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Progress</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 bg-gray-200 rounded-full h-3">
+          {/* Application Status & Stage Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+            {/* Status Card - Category (Applicant/Camper/Inactive) */}
+            <div className="relative overflow-hidden rounded-xl border bg-white shadow-sm">
+              <div className="absolute top-0 left-0 w-1.5 h-full" style={{ backgroundColor: getCategoryColor(application.status).text }} />
+              <div className="p-5 pl-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Status</p>
+                    <p className="text-2xl font-bold" style={{ color: getCategoryColor(application.status).text }}>
+                      {getCategoryColor(application.status).label}
+                    </p>
+                  </div>
                   <div
-                    className="bg-camp-green h-3 rounded-full transition-all"
-                    style={{ width: `${application.completion_percentage}%` }}
-                  />
+                    className="flex items-center justify-center w-12 h-12 rounded-full"
+                    style={{ backgroundColor: getCategoryColor(application.status).bg }}
+                  >
+                    {application.status === 'applicant' && (
+                      <svg className="w-6 h-6" style={{ color: getCategoryColor(application.status).text }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    )}
+                    {application.status === 'camper' && (
+                      <svg className="w-6 h-6" style={{ color: getCategoryColor(application.status).text }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                      </svg>
+                    )}
+                    {application.status === 'inactive' && (
+                      <svg className="w-6 h-6" style={{ color: getCategoryColor(application.status).text }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                      </svg>
+                    )}
+                  </div>
                 </div>
-                <span className="text-lg font-semibold text-camp-charcoal">
-                  {application.completion_percentage}%
-                </span>
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Completed</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-700">
-                {application.completed_at
-                  ? formatDateCST(application.completed_at)
-                  : <span className="text-gray-500 italic">In progress</span>}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+            {/* Stage Card - Sub-status (Incomplete/Complete/Under Review/etc.) */}
+            <div className="relative overflow-hidden rounded-xl border bg-white shadow-sm">
+              <div className="absolute top-0 left-0 w-1.5 h-full" style={{ backgroundColor: getStatusColor(application.status, application.sub_status).text }} />
+              <div className="p-5 pl-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Stage</p>
+                    <p className="text-2xl font-bold" style={{ color: getStatusColor(application.status, application.sub_status).text }}>
+                      {getStatusColor(application.status, application.sub_status).label}
+                    </p>
+                  </div>
+                  <div
+                    className="flex items-center justify-center w-12 h-12 rounded-full"
+                    style={{ backgroundColor: getStatusColor(application.status, application.sub_status).bg }}
+                  >
+                    {application.sub_status === 'incomplete' && (
+                      <svg className="w-6 h-6" style={{ color: getStatusColor(application.status, application.sub_status).text }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    )}
+                    {application.sub_status === 'complete' && (
+                      <svg className="w-6 h-6" style={{ color: getStatusColor(application.status, application.sub_status).text }} fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                    {application.sub_status === 'under_review' && (
+                      <svg className="w-6 h-6" style={{ color: getStatusColor(application.status, application.sub_status).text }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    )}
+                    {application.sub_status === 'waitlist' && (
+                      <svg className="w-6 h-6" style={{ color: getStatusColor(application.status, application.sub_status).text }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      </svg>
+                    )}
+                    {(application.sub_status === 'withdrawn' || application.sub_status === 'deferred' || application.sub_status === 'inactive') && (
+                      <svg className="w-6 h-6" style={{ color: getStatusColor(application.status, application.sub_status).text }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    )}
+                    {application.sub_status === 'not_started' && (
+                      <svg className="w-6 h-6" style={{ color: getStatusColor(application.status, application.sub_status).text }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
 
         {/* Payment is now managed via the Admin Panel Payment tab */}
 
