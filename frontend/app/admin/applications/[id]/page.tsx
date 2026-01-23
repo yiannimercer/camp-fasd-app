@@ -964,60 +964,134 @@ export default function AdminApplicationDetailPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            {/* Left: Logo and Back Button */}
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="ghost"
-                size="sm"
+      {/* Unified Sticky Header - Navigation + Camper Context */}
+      <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-20">
+        {/* Top Bar - Back Navigation & User Actions */}
+        <div className="border-b border-gray-100 bg-gray-50/80">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center h-12">
+              {/* Back Button */}
+              <button
                 onClick={() => router.push('/admin/applications')}
-                className="flex items-center gap-2"
+                className="group flex items-center gap-2 px-3 py-1.5 -ml-3 rounded-lg text-gray-600 hover:text-camp-green hover:bg-camp-green/5 transition-all"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                <svg className="w-5 h-5 transition-transform group-hover:-translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
-                Back
-              </Button>
-              <div className="flex items-center">
-                <Image
-                  src="/camp-logo.png"
-                  alt="CAMP - A FASD Community"
-                  width={40}
-                  height={44}
-                  className="object-contain"
-                />
-                <p className="ml-2 text-xs text-gray-500 font-medium">Admin Portal</p>
-              </div>
-            </div>
+                <span className="font-medium">All Applications</span>
+              </button>
 
-            {/* Right: User Info and Logout */}
-            <div className="flex items-center space-x-4">
-              <div className="text-right hidden sm:block">
-                <p className="text-sm font-medium text-camp-charcoal">
-                  {user?.first_name} {user?.last_name}
-                </p>
-                <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
+              {/* Right: User Actions */}
+              <div className="flex items-center gap-3">
+                <div className="hidden sm:flex items-center gap-2 text-sm text-gray-500">
+                  <span>{user?.first_name} {user?.last_name}</span>
+                  <span className="text-gray-300">•</span>
+                  <span className="capitalize">{user?.role?.replace('_', ' ')}</span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  Sign Out
+                </button>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLogout}
-              >
-                Sign Out
-              </Button>
             </div>
           </div>
         </div>
+
+        {/* Bottom Bar - Camper Context (only shows when camper name available) */}
+        {application && (application.camper_first_name || application.camper_last_name) && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between py-3">
+              {/* Camper Info */}
+              <div className="flex items-center gap-4">
+                <Avatar className="h-11 w-11 ring-2 ring-camp-green/20 shadow-sm">
+                  {profilePictureUrl ? (
+                    <AvatarImage src={profilePictureUrl} alt={`${application.camper_first_name} ${application.camper_last_name}`} />
+                  ) : null}
+                  <AvatarFallback className="bg-gradient-to-br from-camp-green to-camp-green/80 text-white font-bold text-base">
+                    {`${application.camper_first_name?.charAt(0) || ''}${application.camper_last_name?.charAt(0) || ''}`.toUpperCase() || '?'}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <h1 className="text-lg font-bold text-camp-charcoal leading-tight">
+                    {application.camper_first_name} {application.camper_last_name}
+                  </h1>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span
+                      className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full"
+                      style={getStatusStyle(application.status, application.sub_status)}
+                    >
+                      {getStatusColor(application.status, application.sub_status).label}
+                    </span>
+                    {application.is_returning_camper && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                        </svg>
+                        Returning
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Indicator */}
+              <div className="hidden sm:flex items-center gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Completion</p>
+                    <p className="text-xl font-bold text-camp-green leading-tight">{application.completion_percentage}%</p>
+                  </div>
+                  <div className="w-20 h-20 relative">
+                    {/* Circular progress ring */}
+                    <svg className="w-20 h-20 transform -rotate-90" viewBox="0 0 36 36">
+                      <path
+                        className="text-gray-200"
+                        strokeWidth="3"
+                        stroke="currentColor"
+                        fill="none"
+                        d="M18 2.0845
+                          a 15.9155 15.9155 0 0 1 0 31.831
+                          a 15.9155 15.9155 0 0 1 0 -31.831"
+                      />
+                      <path
+                        className="text-camp-green"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        stroke="currentColor"
+                        fill="none"
+                        strokeDasharray={`${application.completion_percentage}, 100`}
+                        d="M18 2.0845
+                          a 15.9155 15.9155 0 0 1 0 31.831
+                          a 15.9155 15.9155 0 0 1 0 -31.831"
+                      />
+                    </svg>
+                    {/* Center icon */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      {application.completion_percentage === 100 ? (
+                        <svg className="w-6 h-6 text-camp-green" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Main Content with Sidebar */}
       <div className="flex">
         {/* Left Sidebar - Section Progress */}
         {/* Hidden on mobile, visible on md+ screens (prioritized over admin nav on md screens) */}
-        <aside className="hidden md:block w-64 bg-white border-r border-gray-200 sticky top-16 h-[calc(100vh-4rem)] overflow-y-auto">
+        <aside className="hidden md:block w-64 bg-white border-r border-gray-200 sticky top-28 h-[calc(100vh-7rem)] overflow-y-auto">
           <div className="p-4">
             <h3 className="text-sm font-semibold text-camp-charcoal mb-4">Sections</h3>
             <div className="space-y-2">
@@ -1131,54 +1205,6 @@ export default function AdminApplicationDetailPage() {
 
         {/* Main Content Area */}
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-8">
-          {/* Sticky Camper Info Card */}
-          {application && (application.camper_first_name || application.camper_last_name) && (
-            <div className="sticky top-16 z-10 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 mb-6 bg-white/95 backdrop-blur-sm border-b shadow-sm">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-12 w-12 border-2 border-camp-green shadow-md">
-                    {profilePictureUrl ? (
-                      <AvatarImage src={profilePictureUrl} alt={`${application.camper_first_name} ${application.camper_last_name}`} />
-                    ) : null}
-                    <AvatarFallback className="bg-camp-green text-white font-bold text-lg">
-                      {`${application.camper_first_name?.charAt(0) || ''}${application.camper_last_name?.charAt(0) || ''}`.toUpperCase() || '?'}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <h1 className="text-xl font-bold text-camp-charcoal">
-                      {application.camper_first_name} {application.camper_last_name}
-                    </h1>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span
-                        className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full"
-                        style={getStatusStyle(application.status, application.sub_status)}
-                      >
-                        {getStatusColor(application.status, application.sub_status).label}
-                      </span>
-                      {application.is_returning_camper && (
-                        <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
-                          Returning Camper
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="hidden sm:flex items-center gap-4">
-                  <div className="text-right">
-                    <p className="text-xs text-gray-500">Progress</p>
-                    <p className="text-lg font-bold text-camp-green">{application.completion_percentage}%</p>
-                  </div>
-                  <div className="w-24 bg-gray-200 rounded-full h-2">
-                    <div
-                      className="bg-camp-green h-2 rounded-full transition-all"
-                      style={{ width: `${application.completion_percentage}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Application Info */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <Card>
