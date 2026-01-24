@@ -69,6 +69,16 @@ export default function ApplicationWizardPage() {
   const [tableData, setTableData] = useState<Record<string, TableRow[]>>({}) // questionId -> table rows
   const [dragOverQuestionId, setDragOverQuestionId] = useState<string | null>(null) // Track which upload area is being dragged over
 
+  // Find Missing Questions feature - helps users locate unanswered required questions
+  const [sectionMissingQuestions, setSectionMissingQuestions] = useState<Array<{
+    questionId: string
+    questionText: string
+    questionNumber: number
+  }>>([])
+  const [currentMissingIndex, setCurrentMissingIndex] = useState(-1)
+  const [highlightedQuestionId, setHighlightedQuestionId] = useState<string | null>(null)
+  const questionRefs = useRef<Record<string, HTMLDivElement | null>>({})
+
   // Track unsaved changes for immediate save on page unload
   const hasUnsavedChanges = useRef(false)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -812,6 +822,81 @@ export default function ApplicationWizardPage() {
     return items.sort((a, b) => a.order_index - b.order_index)
   }
 
+  // Compute missing required questions for the current section
+  // This enables the "Find Missing" feature without being intrusive
+  useEffect(() => {
+    if (!sections.length || currentSectionIndex >= sections.length) {
+      setSectionMissingQuestions([])
+      return
+    }
+
+    const currentSection = sections[currentSectionIndex]
+    if (!currentSection) return
+
+    const missing: Array<{ questionId: string; questionText: string; questionNumber: number }> = []
+    let questionNumber = 0
+
+    // Get items in order and check visibility
+    const items = getSectionItems(currentSection)
+
+    items.forEach((item) => {
+      if (item.type !== 'question') return
+
+      const question = item.data as ApplicationQuestion
+
+      // Only count visible questions
+      if (!shouldShowQuestion(question)) return
+
+      questionNumber++
+
+      // Check if required and unanswered
+      if (question.is_required) {
+        const response = responses[question.id]
+        const hasAnswer = response && response.trim() !== ''
+
+        if (!hasAnswer) {
+          missing.push({
+            questionId: question.id,
+            questionText: question.question_text,
+            questionNumber
+          })
+        }
+      }
+    })
+
+    setSectionMissingQuestions(missing)
+    // Reset the navigation index when section changes
+    setCurrentMissingIndex(-1)
+    setHighlightedQuestionId(null)
+  }, [sections, currentSectionIndex, responses])
+
+  // Navigate to the next missing question with smooth scroll and highlight
+  const goToNextMissing = () => {
+    if (sectionMissingQuestions.length === 0) return
+
+    // Calculate next index (cycle through)
+    const nextIndex = currentMissingIndex < sectionMissingQuestions.length - 1
+      ? currentMissingIndex + 1
+      : 0
+
+    setCurrentMissingIndex(nextIndex)
+    const questionId = sectionMissingQuestions[nextIndex].questionId
+
+    // Scroll to the question
+    const element = questionRefs.current[questionId]
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+      // Apply highlight animation
+      setHighlightedQuestionId(questionId)
+
+      // Remove highlight after animation completes
+      setTimeout(() => {
+        setHighlightedQuestionId(null)
+      }, 2500)
+    }
+  }
+
 
   if (loading) {
     return (
@@ -1115,6 +1200,46 @@ export default function ApplicationWizardPage() {
                     </>
                   )}
                 </CardDescription>
+
+                {/* Find Missing Questions - Subtle helper button */}
+                {sectionMissingQuestions.length > 0 && getProgressPercentage(currentSection?.id) > 0 && (
+                  <button
+                    onClick={goToNextMissing}
+                    className="group mt-3 inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 hover:bg-amber-50 hover:text-amber-700 border border-gray-200 hover:border-amber-200 rounded-full transition-all duration-200"
+                  >
+                    <svg
+                      className="w-4 h-4 text-gray-400 group-hover:text-amber-500 transition-colors"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                      />
+                    </svg>
+                    <span>
+                      {currentMissingIndex === -1
+                        ? `Find ${sectionMissingQuestions.length} missing`
+                        : `${currentMissingIndex + 1} of ${sectionMissingQuestions.length} missing`}
+                    </span>
+                    <svg
+                      className="w-3 h-3 text-gray-400 group-hover:text-amber-500 group-hover:translate-y-0.5 transition-all"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 14l-7 7m0 0l-7-7m7 7V3"
+                      />
+                    </svg>
+                  </button>
+                )}
               </CardHeader>
               <CardContent className="space-y-6 sm:space-y-8">
                 {/* Profile Header - Shows camper name and photo */}
@@ -1157,8 +1282,19 @@ export default function ApplicationWizardPage() {
                     questionNumber++ // Increment for visible questions only
                     const qIndex = questionNumber - 1 // 0-based index for display
 
+                    // Check if this question is currently highlighted by the Find Missing feature
+                    const isHighlighted = highlightedQuestionId === question.id
+
                     return (
-                  <div key={question.id} className="pb-6 sm:pb-8 border-b border-gray-200 last:border-0">
+                  <div
+                    key={question.id}
+                    ref={(el) => { questionRefs.current[question.id] = el }}
+                    className={`pb-6 sm:pb-8 border-b border-gray-200 last:border-0 transition-all duration-500 rounded-lg ${
+                      isHighlighted
+                        ? 'bg-gradient-to-r from-amber-50 via-amber-50/80 to-transparent ring-2 ring-amber-300 ring-offset-2 p-4 -mx-4 animate-pulse'
+                        : ''
+                    }`}
+                  >
                     {/* Legacy: Section Header from question field (deprecated) */}
                     {question.header_text && (
                       <div className="mb-6 pb-3 border-b-2 border-camp-green/30">
