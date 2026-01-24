@@ -1152,9 +1152,29 @@ export default function ApplicationWizardPage() {
                 <span className="text-xs font-medium bg-white/20 px-2 py-0.5 rounded-full">
                   Section {currentSectionIndex + 1}/{sections.length}
                 </span>
-                <span className="text-sm font-semibold">{currentSection?.title}</span>
+                <span className="text-sm font-semibold hidden sm:inline">{currentSection?.title}</span>
               </div>
               <div className="flex items-center gap-2 text-xs">
+                {/* Find Missing Questions - Sticky chip button */}
+                {sectionMissingQuestions.length > 0 &&
+                 currentSection?.questions.some(q => responses[q.id] && responses[q.id].trim() !== '') && (
+                  <button
+                    onClick={goToNextMissing}
+                    className="group flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-amber-900 px-2.5 py-0.5 rounded-full font-medium transition-all hover:scale-105 active:scale-95"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <span>
+                      {currentMissingIndex === -1
+                        ? `${sectionMissingQuestions.length} missing`
+                        : `${currentMissingIndex + 1}/${sectionMissingQuestions.length}`}
+                    </span>
+                    <svg className="w-2.5 h-2.5 group-hover:translate-y-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                    </svg>
+                  </button>
+                )}
                 {getProgressPercentage(currentSection?.id) === 100 ? (
                   <span className="flex items-center gap-1 bg-white/20 px-2 py-0.5 rounded-full">
                     <CheckCircle2 className="w-3 h-3" />
@@ -1200,51 +1220,6 @@ export default function ApplicationWizardPage() {
                     </>
                   )}
                 </CardDescription>
-
-                {/* Find Missing Questions - Subtle helper button
-                    Only shows when:
-                    1. There are missing required questions in this section
-                    2. User has answered at least one question (not first visit)
-                    This uses local responses state for real-time feedback */}
-                {sectionMissingQuestions.length > 0 &&
-                 currentSection?.questions.some(q => responses[q.id] && responses[q.id].trim() !== '') && (
-                  <button
-                    onClick={goToNextMissing}
-                    className="group mt-3 inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 hover:bg-amber-50 hover:text-amber-700 border border-gray-200 hover:border-amber-200 rounded-full transition-all duration-200"
-                  >
-                    <svg
-                      className="w-4 h-4 text-gray-400 group-hover:text-amber-500 transition-colors"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                      />
-                    </svg>
-                    <span>
-                      {currentMissingIndex === -1
-                        ? `Find ${sectionMissingQuestions.length} missing`
-                        : `${currentMissingIndex + 1} of ${sectionMissingQuestions.length} missing`}
-                    </span>
-                    <svg
-                      className="w-3 h-3 text-gray-400 group-hover:text-amber-500 group-hover:translate-y-0.5 transition-all"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 14l-7 7m0 0l-7-7m7 7V3"
-                      />
-                    </svg>
-                  </button>
-                )}
               </CardHeader>
               <CardContent className="space-y-6 sm:space-y-8">
                 {/* Profile Header - Shows camper name and photo */}
