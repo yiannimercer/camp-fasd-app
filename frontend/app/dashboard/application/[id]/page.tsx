@@ -1201,8 +1201,13 @@ export default function ApplicationWizardPage() {
                   )}
                 </CardDescription>
 
-                {/* Find Missing Questions - Subtle helper button */}
-                {sectionMissingQuestions.length > 0 && getProgressPercentage(currentSection?.id) > 0 && (
+                {/* Find Missing Questions - Subtle helper button
+                    Only shows when:
+                    1. There are missing required questions in this section
+                    2. User has answered at least one question (not first visit)
+                    This uses local responses state for real-time feedback */}
+                {sectionMissingQuestions.length > 0 &&
+                 currentSection?.questions.some(q => responses[q.id] && responses[q.id].trim() !== '') && (
                   <button
                     onClick={goToNextMissing}
                     className="group mt-3 inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 hover:bg-amber-50 hover:text-amber-700 border border-gray-200 hover:border-amber-200 rounded-full transition-all duration-200"
