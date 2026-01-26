@@ -1088,6 +1088,26 @@ export default function ApplicationWizardPage() {
                 <span className="text-sm font-medium text-camp-orange bg-camp-orange/10 px-2 py-0.5 rounded-full">
                   Section {currentSectionIndex + 1}/{sections.length}
                 </span>
+                {/* Find Missing - styled as companion chip to Section indicator */}
+                {sectionMissingQuestions.length > 0 && (
+                  <button
+                    onClick={goToNextMissing}
+                    className="group flex items-center gap-1 text-sm font-medium text-amber-600 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded-full transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                    </span>
+                    <span>
+                      {currentMissingIndex === -1
+                        ? `${sectionMissingQuestions.length} missing`
+                        : `${currentMissingIndex + 1}/${sectionMissingQuestions.length}`}
+                    </span>
+                    <svg className="w-3 h-3 opacity-60 group-hover:opacity-100 group-hover:translate-y-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                    </svg>
+                  </button>
+                )}
               </div>
               <h1 className="text-xl lg:text-2xl font-bold text-camp-charcoal mt-1">
                 {currentSection?.title}
@@ -1141,27 +1161,6 @@ export default function ApplicationWizardPage() {
             <span className="hidden sm:inline">{saving ? 'Saving...' : 'Save & Exit'}</span>
             <span className="sm:hidden">{saving ? 'Saving...' : 'Exit'}</span>
           </Button>
-
-          {/* Find Missing Questions - shows when there are unanswered required questions */}
-          {sectionMissingQuestions.length > 0 && (
-            <button
-              onClick={goToNextMissing}
-              className="group flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-white px-3 py-1.5 rounded-full font-medium text-sm transition-all hover:scale-105 active:scale-95 shadow-md ml-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <span className="hidden sm:inline">
-                {currentMissingIndex === -1
-                  ? `${sectionMissingQuestions.length} missing`
-                  : `${currentMissingIndex + 1}/${sectionMissingQuestions.length}`}
-              </span>
-              <span className="sm:hidden">{sectionMissingQuestions.length}</span>
-              <svg className="w-3 h-3 group-hover:translate-y-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-              </svg>
-            </button>
-          )}
         </header>
 
         {/* Questions - Content area */}
