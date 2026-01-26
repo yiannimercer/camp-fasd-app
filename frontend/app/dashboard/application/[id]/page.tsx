@@ -1142,12 +1142,11 @@ export default function ApplicationWizardPage() {
             <span className="sm:hidden">{saving ? 'Saving...' : 'Exit'}</span>
           </Button>
 
-          {/* Find Missing Questions - in header for visibility */}
-          {sectionMissingQuestions.length > 0 &&
-           currentSection?.questions.some(q => responses[q.id] && responses[q.id].trim() !== '') && (
+          {/* Find Missing Questions - shows when there are unanswered required questions */}
+          {sectionMissingQuestions.length > 0 && (
             <button
               onClick={goToNextMissing}
-              className="group flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-white px-3 py-1.5 rounded-full font-medium transition-all hover:scale-105 active:scale-95 shadow-md ml-2"
+              className="group flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-white px-3 py-1.5 rounded-full font-medium text-sm transition-all hover:scale-105 active:scale-95 shadow-md ml-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
