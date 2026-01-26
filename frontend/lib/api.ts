@@ -1,8 +1,21 @@
 /**
  * API client for communicating with the backend
+ *
+ * Security: All state-changing requests (POST, PUT, DELETE, PATCH) include
+ * the X-Requested-With header for CSRF protection.
  */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
+/**
+ * Base headers for CSRF protection
+ * The X-Requested-With header prevents CSRF attacks because:
+ * 1. It cannot be set by HTML forms (only JavaScript)
+ * 2. Cross-origin JavaScript cannot set custom headers without CORS permission
+ */
+const CSRF_HEADER = {
+  'X-Requested-With': 'XMLHttpRequest',
+}
 
 export interface User {
   id: string
@@ -51,6 +64,7 @@ export async function checkLegacyUser(email: string): Promise<CheckLegacyUserRes
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...CSRF_HEADER,
     },
     body: JSON.stringify({ email }),
   })
@@ -77,6 +91,7 @@ export async function markPasswordSet(email: string): Promise<{ success: boolean
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...CSRF_HEADER,
     },
     body: JSON.stringify({ email }),
   })
@@ -96,6 +111,7 @@ export async function login(credentials: LoginCredentials): Promise<AuthResponse
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(credentials),
   })
@@ -116,6 +132,7 @@ export async function register(data: RegisterData): Promise<AuthResponse> {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(data),
   })
@@ -155,6 +172,7 @@ export async function logout(token: string): Promise<void> {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 }

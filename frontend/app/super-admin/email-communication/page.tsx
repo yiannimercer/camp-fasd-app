@@ -748,7 +748,7 @@ export default function EmailCommunicationPage() {
                                 <strong>Template:</strong> {automation.template_name || automation.template_key}
                               </span>
                             </div>
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-4 flex-wrap">
                               {automation.trigger_type === 'event' ? (
                                 <span>
                                   <strong>Trigger:</strong>{' '}
@@ -760,11 +760,25 @@ export default function EmailCommunicationPage() {
                                   )}
                                 </span>
                               ) : (
-                                <span>
-                                  <strong>Schedule:</strong>{' '}
-                                  {DAYS_OF_WEEK.find(d => d.value === automation.schedule_day)?.label} at{' '}
-                                  {HOUR_OPTIONS.find(h => h.value === automation.schedule_hour)?.label}
-                                </span>
+                                <>
+                                  <span>
+                                    <strong>Schedule:</strong>{' '}
+                                    {DAYS_OF_WEEK.find(d => d.value === automation.schedule_day)?.label} at{' '}
+                                    {HOUR_OPTIONS.find(h => h.value === automation.schedule_hour)?.label}
+                                    <span className="text-xs text-muted-foreground ml-1">(Central)</span>
+                                  </span>
+                                  {automation.last_sent_at && (
+                                    <span className="text-green-600">
+                                      <strong>Last sent:</strong>{' '}
+                                      {format(new Date(automation.last_sent_at), 'MMM d, yyyy h:mm a')}
+                                    </span>
+                                  )}
+                                  {!automation.last_sent_at && automation.is_active && (
+                                    <span className="text-amber-600">
+                                      <strong>Last sent:</strong> Never
+                                    </span>
+                                  )}
+                                </>
                               )}
                             </div>
                             <div>
@@ -1074,7 +1088,7 @@ export default function EmailCommunicationPage() {
                       <SelectValue placeholder="Select template..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {templates.map((t) => (
+                      {templates.filter((t) => t.is_active).map((t) => (
                         <SelectItem key={t.key} value={t.key}>
                           {t.name}
                         </SelectItem>
@@ -1151,43 +1165,48 @@ export default function EmailCommunicationPage() {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Day of Week</Label>
-                    <Select
-                      value={String(editingAutomation.schedule_day ?? 1)}
-                      onValueChange={(value) => setEditingAutomation({ ...editingAutomation, schedule_day: parseInt(value) })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DAYS_OF_WEEK.map((d) => (
-                          <SelectItem key={d.value} value={String(d.value)}>
-                            {d.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Day of Week</Label>
+                      <Select
+                        value={String(editingAutomation.schedule_day ?? 1)}
+                        onValueChange={(value) => setEditingAutomation({ ...editingAutomation, schedule_day: parseInt(value) })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DAYS_OF_WEEK.map((d) => (
+                            <SelectItem key={d.value} value={String(d.value)}>
+                              {d.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Time (Central)</Label>
+                      <Select
+                        value={String(editingAutomation.schedule_hour ?? 9)}
+                        onValueChange={(value) => setEditingAutomation({ ...editingAutomation, schedule_hour: parseInt(value) })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {HOUR_OPTIONS.map((h) => (
+                            <SelectItem key={h.value} value={String(h.value)}>
+                              {h.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Time</Label>
-                    <Select
-                      value={String(editingAutomation.schedule_hour ?? 9)}
-                      onValueChange={(value) => setEditingAutomation({ ...editingAutomation, schedule_hour: parseInt(value) })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {HOUR_OPTIONS.map((h) => (
-                          <SelectItem key={h.value} value={String(h.value)}>
-                            {h.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Times are in Central Time (Chicago). CST/CDT transitions are handled automatically.
+                  </p>
                 </div>
               )}
 
@@ -1262,6 +1281,12 @@ export default function EmailCommunicationPage() {
           url: d.url || '',
         }))}
         onLoadDocuments={loadDocuments}
+        automations={automations.map(a => ({
+          id: a.id,
+          name: a.name,
+          template_key: a.template_key,
+          is_active: a.is_active,
+        }))}
       />
 
       {/* Delete Automation Confirmation Modal */}

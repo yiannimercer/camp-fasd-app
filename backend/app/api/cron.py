@@ -6,9 +6,12 @@ Vercel Cron Configuration (vercel.json):
 {
   "crons": [
     { "path": "/api/cron/process-queue", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/weekly-emails", "schedule": "0 9 * * 1" }
+    { "path": "/api/cron/scheduled-automations", "schedule": "0 * * * *" }
   ]
 }
+
+The scheduled-automations endpoint is called hourly and processes email automations
+from the email_automations table based on their configured schedule_day and schedule_hour.
 """
 
 from datetime import datetime, timezone, timedelta
@@ -23,6 +26,7 @@ from app.models.user import User
 from app.models.application import Application
 from app.models.super_admin import SystemConfiguration
 from app.services import email_service
+from app.services.scheduled_emails import process_all_due_automations
 
 router = APIRouter()
 
@@ -30,11 +34,48 @@ router = APIRouter()
 def verify_cron_secret(authorization: Optional[str] = Header(None)):
     """
     Verify the cron job is being called by Vercel or an authorized source.
-    In production, Vercel cron jobs include an authorization header.
-    For development, we allow requests without auth.
+    In production, Vercel cron jobs must include an authorization header.
+
+    Security: This prevents unauthorized users from triggering email operations.
+
+    Expected header format: Authorization: Bearer <CRON_SECRET>
     """
-    # In production, verify the authorization header matches a secret
-    # For now, we allow all requests (can be secured later with CRON_SECRET env var)
+    # In development mode without CRON_SECRET configured, allow requests
+    if settings.DEBUG and not settings.CRON_SECRET:
+        return True
+
+    # In production, CRON_SECRET must be set
+    if not settings.CRON_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Server misconfiguration: CRON_SECRET not set"
+        )
+
+    # Verify the authorization header is present
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authorization header"
+        )
+
+    # Parse Bearer token
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization header format. Expected: Bearer <token>"
+        )
+
+    token = parts[1]
+
+    # Constant-time comparison to prevent timing attacks
+    import hmac
+    if not hmac.compare_digest(token, settings.CRON_SECRET):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid cron secret"
+        )
+
     return True
 
 
@@ -328,3 +369,35 @@ async def trigger_incomplete_reminders(
     camp_year = get_config_value(db, 'camp_year', datetime.now().year)
     result = await send_incomplete_reminders(db, camp_year)
     return {"success": True, **result}
+
+
+@router.post("/scheduled-automations")
+async def send_scheduled_automations(
+    db: Session = Depends(get_db),
+    authorized: bool = Depends(verify_cron_secret)
+):
+    """
+    Process scheduled email automations from the database.
+
+    This endpoint is called hourly by Vercel Cron. It queries the email_automations
+    table for automations where:
+    - trigger_type = 'scheduled'
+    - is_active = True
+    - schedule_day matches current UTC day (0=Sunday, 6=Saturday)
+    - schedule_hour matches current UTC hour (0-23)
+    - last_sent_at is null or > 7 days ago (prevents duplicates)
+
+    Each matching automation sends emails to recipients based on its audience_filter
+    using the configured email template.
+
+    This is the data-driven replacement for the hardcoded weekly-emails endpoint,
+    allowing admins to configure scheduled emails via the super admin UI.
+    """
+    camp_year = get_config_value(db, 'camp_year', datetime.now().year)
+    results = await process_all_due_automations(db, camp_year)
+
+    return {
+        "success": True,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        **results
+    }

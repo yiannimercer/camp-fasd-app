@@ -3,6 +3,7 @@ Dependency injection for FastAPI routes
 Supports both Supabase Auth JWTs and legacy custom JWTs for backward compatibility
 """
 
+import traceback
 from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -10,7 +11,11 @@ from sqlalchemy.orm import Session
 from jose import jwt, JWTError
 from app.core.database import get_db
 from app.core.config import settings
+from app.core.logging_config import get_logger
 from app.models.user import User
+
+# Configure logger for authentication
+logger = get_logger("auth")
 
 # HTTP Bearer token security scheme
 security = HTTPBearer()
@@ -37,7 +42,7 @@ def decode_supabase_token(token: str) -> Optional[str]:
         )
         return payload.get("sub")
     except JWTError as e:
-        print(f"HS256 decode failed: {e}, trying JWKS/ECC...")
+        logger.debug(f"HS256 decode failed: {e}, trying JWKS/ECC...")
 
     # If HS256 fails, try JWKS-based verification using PyJWT (for ECC keys)
     try:
@@ -48,7 +53,7 @@ def decode_supabase_token(token: str) -> Optional[str]:
         project_ref = settings.SUPABASE_URL.replace("https://", "").split(".")[0]
         jwks_url = f"https://{project_ref}.supabase.co/auth/v1/.well-known/jwks.json"
 
-        print(f"Attempting JWKS verification from: {jwks_url}")
+        logger.debug(f"Attempting JWKS verification from: {jwks_url}")
 
         # Create client and get signing key
         jwks_client = PyJWKClient(jwks_url)
@@ -61,16 +66,15 @@ def decode_supabase_token(token: str) -> Optional[str]:
             algorithms=["ES256", "RS256"],
             audience="authenticated",
         )
-        print(f"JWKS verification successful, sub: {payload.get('sub')}")
+        logger.debug(f"JWKS verification successful, sub: {payload.get('sub')}")
         return payload.get("sub")
 
     except ImportError as e:
-        print(f"PyJWT import failed: {e}")
+        logger.warning(f"PyJWT import failed: {e}")
         return None
     except Exception as e:
-        print(f"JWKS/ECC decode failed: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.warning(f"JWKS/ECC decode failed: {type(e).__name__}: {e}")
+        logger.debug(traceback.format_exc())
         return None
 
 
@@ -126,7 +130,7 @@ async def get_current_user(
         # If not found by supabase_auth_id, the user might have just signed up
         # and the trigger hasn't run yet, or there's a sync issue
         if not user:
-            print(f"User with supabase_auth_id {supabase_user_id} not found in database")
+            logger.warning(f"User with supabase_auth_id {supabase_user_id} not found in database")
 
     # Fall back to legacy token if Supabase token didn't work
     if user is None:

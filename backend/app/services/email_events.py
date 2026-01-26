@@ -196,6 +196,10 @@ def get_recipients_for_automation(
     # Empty filter = trigger context (the person who triggered the event)
     if not audience_filter or len(audience_filter) == 0:
         if context_user:
+            # Honor receive_emails preference
+            if context_user.receive_emails is False:
+                logger.info(f"Skipping email to {context_user.email} - user has receive_emails disabled")
+                return []
             return [{
                 'email': context_user.email,
                 'first_name': context_user.first_name,
@@ -211,7 +215,8 @@ def get_recipients_for_automation(
     if audience_filter.get('role') == 'admin':
         admins = db.query(User).filter(
             User.role.in_(['admin', 'super_admin']),
-            User.email.isnot(None)
+            User.email.isnot(None),
+            User.receive_emails != False  # Honor receive_emails preference
         ).all()
         for admin in admins:
             recipients.append({
@@ -224,6 +229,9 @@ def get_recipients_for_automation(
 
     # Application-based audiences
     query = db.query(Application, User).join(User, Application.user_id == User.id)
+
+    # Honor receive_emails preference for all users
+    query = query.filter(User.receive_emails != False)
 
     if audience_filter.get('status'):
         query = query.filter(Application.status == audience_filter['status'])

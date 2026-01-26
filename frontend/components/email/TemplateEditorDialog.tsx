@@ -13,6 +13,16 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -160,6 +170,13 @@ interface EmailDocument {
   url: string;
 }
 
+interface EmailAutomationBasic {
+  id: string;
+  name: string;
+  template_key: string;
+  is_active: boolean;
+}
+
 interface TemplateData {
   id?: string;
   key: string;
@@ -182,6 +199,7 @@ interface TemplateEditorDialogProps {
   onPreview: (subject: string, content: string, isMarkdown: boolean, variables: Record<string, string>) => Promise<string>;
   documents?: EmailDocument[];
   onLoadDocuments?: () => void;
+  automations?: EmailAutomationBasic[];
 }
 
 export function TemplateEditorDialog({
@@ -193,6 +211,7 @@ export function TemplateEditorDialog({
   onPreview,
   documents = [],
   onLoadDocuments,
+  automations = [],
 }: TemplateEditorDialogProps) {
   // Form state
   const [formData, setFormData] = useState<TemplateData>({
@@ -219,6 +238,10 @@ export function TemplateEditorDialog({
   const [buttonText, setButtonText] = useState('');
   const [buttonUrl, setButtonUrl] = useState('');
   const [buttonColor, setButtonColor] = useState<'green' | 'orange'>('orange');
+
+  // Warning dialog for deactivating templates with active automations
+  const [deactivateWarningOpen, setDeactivateWarningOpen] = useState(false);
+  const [conflictingAutomations, setConflictingAutomations] = useState<EmailAutomationBasic[]>([]);
 
   // Variable mock values
   const [mockVariables, setMockVariables] = useState<Record<string, string>>({});
@@ -431,11 +454,31 @@ export function TemplateEditorDialog({
     setButtonPopoverOpen(false);
   }, [buttonText, buttonUrl, buttonColor, formData.use_markdown, formData.markdown_content, handleContentChange]);
 
+  // Handle active/inactive toggle with automation check
+  const handleActiveToggle = useCallback(() => {
+    // If trying to deactivate, check for active automations using this template
+    if (formData.is_active && formData.key) {
+      const activeAutomationsUsingTemplate = automations.filter(
+        (a) => a.is_active && a.template_key === formData.key
+      );
+
+      if (activeAutomationsUsingTemplate.length > 0) {
+        setConflictingAutomations(activeAutomationsUsingTemplate);
+        setDeactivateWarningOpen(true);
+        return; // Don't toggle - show warning instead
+      }
+    }
+
+    // No conflicts or activating - proceed with toggle
+    handleContentChange('is_active', !formData.is_active);
+  }, [formData.is_active, formData.key, automations, handleContentChange]);
+
   // Current content for editing
   const currentContent = formData.use_markdown ? formData.markdown_content : formData.html_content;
   const contentField = formData.use_markdown ? 'markdown_content' : 'html_content';
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="max-w-[95vw] w-full h-[90vh] p-0 gap-0 overflow-hidden"
@@ -464,7 +507,7 @@ export function TemplateEditorDialog({
                 ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             )}
-            onClick={() => handleContentChange('is_active', !formData.is_active)}
+            onClick={handleActiveToggle}
           >
             {formData.is_active ? 'Active' : 'Inactive'}
           </Badge>
@@ -1009,5 +1052,35 @@ export function TemplateEditorDialog({
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* Warning Dialog for Deactivating Templates with Active Automations */}
+    <AlertDialog open={deactivateWarningOpen} onOpenChange={setDeactivateWarningOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Cannot Deactivate Template</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-3">
+              <p>
+                This template is currently used by {conflictingAutomations.length} active automation{conflictingAutomations.length !== 1 ? 's' : ''}:
+              </p>
+              <ul className="list-disc pl-5 space-y-1">
+                {conflictingAutomations.map((a) => (
+                  <li key={a.id} className="text-sm font-medium">{a.name}</li>
+                ))}
+              </ul>
+              <p>
+                Please deactivate or delete these automations first, then you can mark this template as inactive.
+              </p>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogAction onClick={() => setDeactivateWarningOpen(false)}>
+            Understood
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

@@ -19,6 +19,7 @@ import { getAdminNotes, createAdminNote, approveApplication, declineApplication,
 import { sendAdHocEmail } from '@/lib/api-emails'
 import { deleteApplication as deleteApplicationApi } from '@/lib/api-super-admin'
 import { Button } from '@/components/ui/button'
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDateCST } from '@/lib/date-utils'
@@ -31,6 +32,12 @@ import GenericTable, { TableRow } from '@/components/GenericTable'
 interface ApplicationData {
   id: string
   user_id: string
+  user?: {
+    id: string
+    email: string
+    first_name: string
+    last_name: string
+  }
   camper_first_name?: string
   camper_last_name?: string
   status: string
@@ -94,6 +101,8 @@ export default function AdminApplicationDetailPage() {
   const [editAllergies, setEditAllergies] = useState<Allergy[]>([])
   const [editTableData, setEditTableData] = useState<TableRow[]>([])
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
+  // Camper profile picture for sticky header
+  const [profilePictureUrl, setProfilePictureUrl] = useState<string>('')
   // Delete application modal state (super admin only)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmStep, setDeleteConfirmStep] = useState(1)
@@ -274,6 +283,24 @@ export default function AdminApplicationDetailPage() {
 
     loadData()
   }, [token, applicationId])
+
+  // Extract profile picture URL when files and sections are loaded
+  useEffect(() => {
+    if (!sections.length || !Object.keys(files).length) return
+
+    // Find the profile_picture question across all sections
+    for (const section of sections) {
+      for (const question of section.questions) {
+        if (question.question_type === 'profile_picture') {
+          const fileInfo = files[question.id]
+          if (fileInfo?.url) {
+            setProfilePictureUrl(fileInfo.url)
+            return
+          }
+        }
+      }
+    }
+  }, [files, sections])
 
   // Load notes
   useEffect(() => {
@@ -549,8 +576,10 @@ export default function AdminApplicationDetailPage() {
     const camperName = application?.camper_first_name && application?.camper_last_name
       ? `${application.camper_first_name} ${application.camper_last_name}`
       : 'your camper'
+    const userFirstName = application?.user?.first_name || 'there'
     setEmailSubject(`Regarding ${camperName}'s CAMP Application`)
-    setEmailMessage('')
+    // Pre-populate with greeting so admin can see/edit it
+    setEmailMessage(`Dear ${userFirstName},\n\n`)
     setShowEmailDialog(true)
   }
 
@@ -943,59 +972,119 @@ export default function AdminApplicationDetailPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            {/* Left: Logo and Back Button */}
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="ghost"
-                size="sm"
+      {/* Unified Sticky Header - Navigation + Camper Context */}
+      <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-20">
+        {/* Top Bar - Back Navigation */}
+        <div className="border-b border-gray-100 bg-gray-50/80">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center h-11">
+              {/* Back Button */}
+              <button
                 onClick={() => router.push('/admin/applications')}
-                className="flex items-center gap-2"
+                className="group flex items-center gap-2 px-3 py-1.5 -ml-3 rounded-lg text-gray-600 hover:text-camp-green hover:bg-camp-green/5 transition-all"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                <svg className="w-5 h-5 transition-transform group-hover:-translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
-                Back
-              </Button>
-              <div className="flex items-center">
-                <Image
-                  src="/camp-logo.png"
-                  alt="CAMP - A FASD Community"
-                  width={40}
-                  height={44}
-                  className="object-contain"
-                />
-                <p className="ml-2 text-xs text-gray-500 font-medium">Admin Portal</p>
-              </div>
-            </div>
-
-            {/* Right: User Info and Logout */}
-            <div className="flex items-center space-x-4">
-              <div className="text-right hidden sm:block">
-                <p className="text-sm font-medium text-camp-charcoal">
-                  {user?.first_name} {user?.last_name}
-                </p>
-                <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLogout}
-              >
-                Sign Out
-              </Button>
+                <span className="font-medium">All Applications</span>
+              </button>
             </div>
           </div>
         </div>
+
+        {/* Bottom Bar - Camper Context (only shows when camper name available) */}
+        {application && (application.camper_first_name || application.camper_last_name) && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between py-3">
+              {/* Camper Info */}
+              <div className="flex items-center gap-4">
+                <Avatar className="h-11 w-11 ring-2 ring-camp-green/20 shadow-sm">
+                  {profilePictureUrl ? (
+                    <AvatarImage src={profilePictureUrl} alt={`${application.camper_first_name} ${application.camper_last_name}`} />
+                  ) : null}
+                  <AvatarFallback className="bg-gradient-to-br from-camp-green to-camp-green/80 text-white font-bold text-base">
+                    {`${application.camper_first_name?.charAt(0) || ''}${application.camper_last_name?.charAt(0) || ''}`.toUpperCase() || '?'}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <h1 className="text-lg font-bold text-camp-charcoal leading-tight">
+                    {application.camper_first_name} {application.camper_last_name}
+                  </h1>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span
+                      className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full"
+                      style={getStatusStyle(application.status, application.sub_status)}
+                    >
+                      {getStatusColor(application.status, application.sub_status).label}
+                    </span>
+                    {application.is_returning_camper && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                        </svg>
+                        Returning
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Indicator */}
+              <div className="hidden sm:flex items-center gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Completion</p>
+                    <p className="text-xl font-bold text-camp-green leading-tight">{application.completion_percentage}%</p>
+                  </div>
+                  <div className="w-20 h-20 relative">
+                    {/* Circular progress ring */}
+                    <svg className="w-20 h-20 transform -rotate-90" viewBox="0 0 36 36">
+                      <path
+                        className="text-gray-200"
+                        strokeWidth="3"
+                        stroke="currentColor"
+                        fill="none"
+                        d="M18 2.0845
+                          a 15.9155 15.9155 0 0 1 0 31.831
+                          a 15.9155 15.9155 0 0 1 0 -31.831"
+                      />
+                      <path
+                        className="text-camp-green"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        stroke="currentColor"
+                        fill="none"
+                        strokeDasharray={`${application.completion_percentage}, 100`}
+                        d="M18 2.0845
+                          a 15.9155 15.9155 0 0 1 0 31.831
+                          a 15.9155 15.9155 0 0 1 0 -31.831"
+                      />
+                    </svg>
+                    {/* Center icon */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      {application.completion_percentage === 100 ? (
+                        <svg className="w-6 h-6 text-camp-green" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Main Content with Sidebar */}
       <div className="flex">
         {/* Left Sidebar - Section Progress */}
-        <aside className="w-64 bg-white border-r border-gray-200 sticky top-16 h-[calc(100vh-4rem)] overflow-y-auto">
+        {/* Hidden on mobile, visible on md+ screens (prioritized over admin nav on md screens) */}
+        <aside className="hidden md:block w-64 bg-white border-r border-gray-200 sticky top-28 h-[calc(100vh-7rem)] overflow-y-auto">
           <div className="p-4">
             <h3 className="text-sm font-semibold text-camp-charcoal mb-4">Sections</h3>
             <div className="space-y-2">
@@ -1109,62 +1198,94 @@ export default function AdminApplicationDetailPage() {
 
         {/* Main Content Area */}
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-8">
-          {/* Application Info */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full"
-                  style={getCategoryStyle(application.status)}
-                >
-                  {getCategoryColor(application.status).label}
-                </span>
-                <span
-                  className="inline-flex px-2.5 py-1 text-sm font-semibold rounded-full"
-                  style={getStatusStyle(application.status, application.sub_status)}
-                >
-                  {getStatusColor(application.status, application.sub_status).label}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Progress</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 bg-gray-200 rounded-full h-3">
+          {/* Application Status & Stage Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+            {/* Status Card - Category (Applicant/Camper/Inactive) */}
+            <div className="relative overflow-hidden rounded-xl border bg-white shadow-sm">
+              <div className="absolute top-0 left-0 w-1.5 h-full" style={{ backgroundColor: getCategoryColor(application.status).text }} />
+              <div className="p-5 pl-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Status</p>
+                    <p className="text-2xl font-bold" style={{ color: getCategoryColor(application.status).text }}>
+                      {getCategoryColor(application.status).label}
+                    </p>
+                  </div>
                   <div
-                    className="bg-camp-green h-3 rounded-full transition-all"
-                    style={{ width: `${application.completion_percentage}%` }}
-                  />
+                    className="flex items-center justify-center w-12 h-12 rounded-full"
+                    style={{ backgroundColor: getCategoryColor(application.status).bg }}
+                  >
+                    {application.status === 'applicant' && (
+                      <svg className="w-6 h-6" style={{ color: getCategoryColor(application.status).text }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    )}
+                    {application.status === 'camper' && (
+                      <svg className="w-6 h-6" style={{ color: getCategoryColor(application.status).text }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                      </svg>
+                    )}
+                    {application.status === 'inactive' && (
+                      <svg className="w-6 h-6" style={{ color: getCategoryColor(application.status).text }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                      </svg>
+                    )}
+                  </div>
                 </div>
-                <span className="text-lg font-semibold text-camp-charcoal">
-                  {application.completion_percentage}%
-                </span>
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Completed</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-700">
-                {application.completed_at
-                  ? formatDateCST(application.completed_at)
-                  : <span className="text-gray-500 italic">In progress</span>}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+            {/* Stage Card - Sub-status (Incomplete/Complete/Under Review/etc.) */}
+            <div className="relative overflow-hidden rounded-xl border bg-white shadow-sm">
+              <div className="absolute top-0 left-0 w-1.5 h-full" style={{ backgroundColor: getStatusColor(application.status, application.sub_status).text }} />
+              <div className="p-5 pl-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Stage</p>
+                    <p className="text-2xl font-bold" style={{ color: getStatusColor(application.status, application.sub_status).text }}>
+                      {getStatusColor(application.status, application.sub_status).label}
+                    </p>
+                  </div>
+                  <div
+                    className="flex items-center justify-center w-12 h-12 rounded-full"
+                    style={{ backgroundColor: getStatusColor(application.status, application.sub_status).bg }}
+                  >
+                    {application.sub_status === 'incomplete' && (
+                      <svg className="w-6 h-6" style={{ color: getStatusColor(application.status, application.sub_status).text }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    )}
+                    {application.sub_status === 'complete' && (
+                      <svg className="w-6 h-6" style={{ color: getStatusColor(application.status, application.sub_status).text }} fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                    {application.sub_status === 'under_review' && (
+                      <svg className="w-6 h-6" style={{ color: getStatusColor(application.status, application.sub_status).text }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    )}
+                    {application.sub_status === 'waitlist' && (
+                      <svg className="w-6 h-6" style={{ color: getStatusColor(application.status, application.sub_status).text }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      </svg>
+                    )}
+                    {(application.sub_status === 'withdrawn' || application.sub_status === 'deferred' || application.sub_status === 'inactive') && (
+                      <svg className="w-6 h-6" style={{ color: getStatusColor(application.status, application.sub_status).text }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    )}
+                    {application.sub_status === 'not_started' && (
+                      <svg className="w-6 h-6" style={{ color: getStatusColor(application.status, application.sub_status).text }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
 
         {/* Payment is now managed via the Admin Panel Payment tab */}
 

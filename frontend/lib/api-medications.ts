@@ -3,6 +3,11 @@ import { Allergy } from '@/components/AllergyList';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+// CSRF protection header required for state-changing requests
+const CSRF_HEADER = {
+  'X-Requested-With': 'XMLHttpRequest',
+}
+
 // ============================================================================
 // MEDICATIONS API
 // ============================================================================
@@ -34,7 +39,8 @@ export async function saveMedication(medication: Medication): Promise<Medication
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...CSRF_HEADER
     },
     body: JSON.stringify(medication)
   });
@@ -55,7 +61,8 @@ export async function updateMedication(
     method: 'PUT',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...CSRF_HEADER
     },
     body: JSON.stringify(updates)
   });
@@ -72,7 +79,8 @@ export async function deleteMedication(medicationId: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/medications/${medicationId}`, {
     method: 'DELETE',
     headers: {
-      'Authorization': `Bearer ${token}`
+      'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER
     }
   });
 
@@ -94,7 +102,8 @@ export async function saveMedicationDose(
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...CSRF_HEADER
     },
     body: JSON.stringify(dose)
   });
@@ -115,7 +124,8 @@ export async function updateMedicationDose(
     method: 'PUT',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...CSRF_HEADER
     },
     body: JSON.stringify(updates)
   });
@@ -132,7 +142,8 @@ export async function deleteMedicationDose(doseId: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/doses/${doseId}`, {
     method: 'DELETE',
     headers: {
-      'Authorization': `Bearer ${token}`
+      'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER
     }
   });
 
@@ -172,7 +183,8 @@ export async function saveAllergy(allergy: Allergy): Promise<Allergy> {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...CSRF_HEADER
     },
     body: JSON.stringify(allergy)
   });
@@ -193,7 +205,8 @@ export async function updateAllergy(
     method: 'PUT',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...CSRF_HEADER
     },
     body: JSON.stringify(updates)
   });
@@ -210,7 +223,8 @@ export async function deleteAllergy(allergyId: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/allergies/${allergyId}`, {
     method: 'DELETE',
     headers: {
-      'Authorization': `Bearer ${token}`
+      'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER
     }
   });
 

@@ -9,6 +9,7 @@ from typing import List
 
 from ..core.database import get_db
 from ..core.deps import get_current_user
+from ..core.security_utils import validate_file_content
 from ..models.user import User
 from ..models.application import (
     Application,
@@ -38,22 +39,23 @@ async def upload_template_file(
     if current_user.role != "super_admin":
         raise HTTPException(status_code=403, detail="Super admin access required")
 
-    # Validate file size
+    # Read file content for validation
     file_content = await file.read()
     file_size = len(file_content)
 
-    if file_size > settings.MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Maximum size is {settings.MAX_FILE_SIZE / (1024*1024)}MB"
-        )
+    # Comprehensive file validation including size, extension, and magic bytes
+    # This prevents malicious files disguised as trusted extensions
+    is_valid, error_message = validate_file_content(
+        file_content=file_content,
+        filename=file.filename,
+        allowed_extensions=settings.ALLOWED_FILE_TYPES,
+        max_size_bytes=settings.MAX_FILE_SIZE,
+    )
 
-    # Validate file type
-    file_extension = "." + file.filename.split(".")[-1].lower() if "." in file.filename else ""
-    if file_extension not in settings.ALLOWED_FILE_TYPES:
+    if not is_valid:
         raise HTTPException(
             status_code=400,
-            detail=f"File type not allowed. Allowed types: {', '.join(settings.ALLOWED_FILE_TYPES)}"
+            detail=error_message
         )
 
     # Reset file pointer for upload
@@ -132,22 +134,23 @@ async def upload_file(
     if not application:
         raise HTTPException(status_code=404, detail="Application not found")
 
-    # Validate file size
+    # Read file content for validation
     file_content = await file.read()
     file_size = len(file_content)
 
-    if file_size > settings.MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Maximum size is {settings.MAX_FILE_SIZE / (1024*1024)}MB"
-        )
+    # Comprehensive file validation including size, extension, and magic bytes
+    # This prevents malicious files disguised as trusted extensions
+    is_valid, error_message = validate_file_content(
+        file_content=file_content,
+        filename=file.filename,
+        allowed_extensions=settings.ALLOWED_FILE_TYPES,
+        max_size_bytes=settings.MAX_FILE_SIZE,
+    )
 
-    # Validate file type
-    file_extension = "." + file.filename.split(".")[-1].lower() if "." in file.filename else ""
-    if file_extension not in settings.ALLOWED_FILE_TYPES:
+    if not is_valid:
         raise HTTPException(
             status_code=400,
-            detail=f"File type not allowed. Allowed types: {', '.join(settings.ALLOWED_FILE_TYPES)}"
+            detail=error_message
         )
 
     # Reset file pointer for upload

@@ -180,33 +180,81 @@ export async function handleFeedbackSubmit(
   }
 }
 
+// Cache for the feedback setting to avoid repeated API calls
+let feedbackSettingCache: boolean | null = null
+let feedbackSettingPromise: Promise<boolean> | null = null
+
+/**
+ * Fetch the feedback widget setting from the public config API
+ */
+async function fetchFeedbackSetting(): Promise<boolean> {
+  try {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    const response = await fetch(`${apiUrl}/api/public/config/enable_feedback_widget`)
+
+    if (!response.ok) {
+      // If config doesn't exist, default to enabled
+      return true
+    }
+
+    const data = await response.json()
+    return data.value === 'true' || data.value === true
+  } catch {
+    // On error, default to enabled
+    return true
+  }
+}
+
 /**
  * Helper to check if feedback widget should be enabled
- * Enabled in development, dev environment, and production (for beta testing)
+ * Checks the super admin configuration setting
  */
 export function shouldEnableFeedback(): boolean {
-  // Enable in development
+  // Always enable in development for testing
   if (process.env.NODE_ENV === 'development') {
     return true
   }
 
-  // Enable in dev environment (beta testing)
-  if (
-    typeof window !== 'undefined' &&
-    window.location.hostname.includes('-dev.')
-  ) {
+  // For non-development, check the cached setting
+  // Return cached value if available, otherwise trigger async fetch
+  if (feedbackSettingCache !== null) {
+    return feedbackSettingCache
+  }
+
+  // Start fetching if not already in progress
+  if (!feedbackSettingPromise) {
+    feedbackSettingPromise = fetchFeedbackSetting().then((result) => {
+      feedbackSettingCache = result
+      return result
+    })
+  }
+
+  // Default to enabled while loading (will update on next check)
+  return true
+}
+
+/**
+ * Async version to get the feedback setting with proper await
+ * Use this when you can handle async (e.g., in useEffect)
+ */
+export async function getFeedbackEnabled(): Promise<boolean> {
+  // Always enable in development
+  if (process.env.NODE_ENV === 'development') {
     return true
   }
 
-  // Enable in production for beta testing with real families
-  // This can be disabled later by removing this condition
-  if (
-    typeof window !== 'undefined' &&
-    window.location.hostname === 'app.fasdcamp.org'
-  ) {
-    return true
+  // Return cached value if available
+  if (feedbackSettingCache !== null) {
+    return feedbackSettingCache
   }
 
-  // Disable everywhere else
-  return false
+  // Fetch and cache
+  if (!feedbackSettingPromise) {
+    feedbackSettingPromise = fetchFeedbackSetting().then((result) => {
+      feedbackSettingCache = result
+      return result
+    })
+  }
+
+  return feedbackSettingPromise
 }

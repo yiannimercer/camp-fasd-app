@@ -9,7 +9,7 @@
 
 import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { handleFeedbackSubmit, shouldEnableFeedback } from '@/lib/feedback-handler'
+import { handleFeedbackSubmit, getFeedbackEnabled } from '@/lib/feedback-handler'
 
 // Dynamically import WidgetProvider to avoid SSR issues
 const WidgetProvider = dynamic(() => import('react-roast'), {
@@ -24,8 +24,8 @@ export default function FeedbackWidget({ children }: FeedbackWidgetProps) {
   const [isEnabled, setIsEnabled] = useState(false)
 
   useEffect(() => {
-    // Only enable in dev environment or development mode
-    setIsEnabled(shouldEnableFeedback())
+    // Check if feedback is enabled via super admin setting
+    getFeedbackEnabled().then(setIsEnabled)
   }, [])
 
   useEffect(() => {

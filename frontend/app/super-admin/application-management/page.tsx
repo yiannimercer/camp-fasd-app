@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Application Management Page
+ * Web App Management Page
  * Super Admin page for configuring application-wide settings.
  * Tab-based layout allows for future expansion (notifications, workflows, etc.)
  */
@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
 import {
   Save,
   Loader2,
@@ -24,10 +25,12 @@ import {
   AlertTriangle,
   Sparkles,
   ArrowRight,
+  MessageSquareText,
+  ToggleRight,
 } from 'lucide-react'
 import { useAuth } from '@/lib/contexts/AuthContext'
 import { useStatusColors, DEFAULT_STATUS_COLORS } from '@/lib/contexts/StatusColorsContext'
-import { updateStatusColors } from '@/lib/api-super-admin'
+import { updateStatusColors, getConfiguration, updateConfiguration } from '@/lib/api-super-admin'
 import {
   COLOR_PRESETS,
   STATUS_METADATA,
@@ -307,9 +310,53 @@ export default function ApplicationManagementPage() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [hasChanges, setHasChanges] = useState(false)
 
+  // Features tab state
+  const [feedbackEnabled, setFeedbackEnabled] = useState(true)
+  const [feedbackLoading, setFeedbackLoading] = useState(true)
+  const [feedbackSaving, setFeedbackSaving] = useState(false)
+
   useEffect(() => {
     setLocalColors({ ...contextColors })
   }, [contextColors])
+
+  // Load feedback toggle setting
+  useEffect(() => {
+    if (!token) return
+
+    const loadFeedbackSetting = async () => {
+      try {
+        const config = await getConfiguration(token, 'enable_feedback_widget')
+        setFeedbackEnabled(config.value === 'true' || config.value === true)
+      } catch {
+        // Default to enabled if setting doesn't exist
+        setFeedbackEnabled(true)
+      } finally {
+        setFeedbackLoading(false)
+      }
+    }
+
+    loadFeedbackSetting()
+  }, [token])
+
+  // Save feedback toggle
+  const handleFeedbackToggle = async (enabled: boolean) => {
+    if (!token) return
+
+    setFeedbackSaving(true)
+    try {
+      await updateConfiguration(token, 'enable_feedback_widget', {
+        value: enabled.toString(),
+        description: 'Enable/disable the feedback widget for users',
+        category: 'features',
+        is_public: true,
+      })
+      setFeedbackEnabled(enabled)
+    } catch (error) {
+      console.error('Failed to save feedback setting:', error)
+    } finally {
+      setFeedbackSaving(false)
+    }
+  }
 
   useEffect(() => {
     const changed = Object.keys(localColors).some((key) => {
@@ -377,9 +424,9 @@ export default function ApplicationManagementPage() {
     <div className="space-y-6 pb-24">
       {/* Page Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Application Management</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Web App Management</h1>
         <p className="text-gray-500 mt-1">
-          Configure application-wide display settings and visual preferences
+          Configure application-wide display settings, visual preferences, and user features
         </p>
       </div>
 
@@ -409,7 +456,10 @@ export default function ApplicationManagementPage() {
             <Palette className="h-4 w-4" />
             Status & Stage Colors
           </TabsTrigger>
-          {/* Future tabs can be added here */}
+          <TabsTrigger value="features" className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+            <ToggleRight className="h-4 w-4" />
+            User Features
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="colors" className="space-y-6 mt-6">
@@ -565,6 +615,92 @@ export default function ApplicationManagementPage() {
                   {localColors.camper_complete.label}
                 </span>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Features Tab */}
+        <TabsContent value="features" className="space-y-6 mt-6">
+          <Card className="border-gray-200 shadow-sm overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-amber-50 to-orange-50/50 border-b border-amber-100/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-sm">
+                  <MessageSquareText className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg font-semibold text-gray-900">Feedback Widget</CardTitle>
+                  <CardDescription className="text-sm text-gray-500">
+                    Allow users to select elements and leave feedback directly in the app
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label htmlFor="feedback-toggle" className="text-base font-medium text-gray-900">
+                    Enable Feedback Mode
+                  </Label>
+                  <p className="text-sm text-gray-500 max-w-md">
+                    When enabled, users will see a floating feedback button that lets them screenshot elements and submit feedback with context.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {feedbackLoading ? (
+                    <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                  ) : (
+                    <>
+                      {feedbackSaving && (
+                        <span className="text-xs text-gray-400 animate-pulse">Saving...</span>
+                      )}
+                      <Switch
+                        id="feedback-toggle"
+                        checked={feedbackEnabled}
+                        onCheckedChange={handleFeedbackToggle}
+                        disabled={feedbackSaving}
+                        className="data-[state=checked]:bg-camp-green"
+                      />
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Feature details */}
+              <div className="mt-6 pt-6 border-t border-gray-100">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">What users can do:</h4>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {[
+                    { icon: '📸', text: 'Capture screenshots of any element' },
+                    { icon: '💬', text: 'Add detailed feedback messages' },
+                    { icon: '🔍', text: 'Auto-capture browser & device info' },
+                    { icon: '📋', text: 'Console logs saved automatically' },
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
+                      <span>{item.icon}</span>
+                      <span>{item.text}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Status indicator */}
+              <div className="mt-6 flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${feedbackEnabled ? 'bg-green-500' : 'bg-gray-300'}`} />
+                <span className={`text-sm font-medium ${feedbackEnabled ? 'text-green-700' : 'text-gray-500'}`}>
+                  {feedbackEnabled ? 'Feedback widget is active for all users' : 'Feedback widget is disabled'}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Placeholder for future features */}
+          <Card className="border-dashed border-2 border-gray-200 bg-gray-50/50">
+            <CardContent className="py-8 text-center">
+              <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center mx-auto mb-3">
+                <Sparkles className="h-6 w-6 text-gray-400" />
+              </div>
+              <p className="text-sm font-medium text-gray-500">More features coming soon</p>
+              <p className="text-xs text-gray-400 mt-1">Additional user experience toggles will appear here</p>
             </CardContent>
           </Card>
         </TabsContent>

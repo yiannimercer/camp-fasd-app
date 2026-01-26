@@ -1,9 +1,16 @@
 /**
  * Admin API Client
  * Functions for admin-only operations
+ *
+ * Security: All state-changing requests include X-Requested-With header for CSRF protection.
  */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
+// CSRF protection header required for state-changing requests
+const CSRF_HEADER = {
+  'X-Requested-With': 'XMLHttpRequest',
+}
 
 export interface UserInfo {
   id: string
@@ -127,6 +134,7 @@ export async function updateApplicationAdmin(
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(data),
   })

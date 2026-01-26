@@ -5,6 +5,11 @@
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
+// CSRF protection header required for state-changing requests
+const CSRF_HEADER = {
+  'X-Requested-With': 'XMLHttpRequest',
+}
+
 export interface AdminInfo {
   id: string
   first_name?: string
@@ -40,6 +45,7 @@ export async function createAdminNote(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(noteData),
   })
@@ -87,6 +93,7 @@ export async function approveApplication(
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
+      ...CSRF_HEADER,
     },
     body: JSON.stringify({ note }),
   })
@@ -112,6 +119,7 @@ export async function declineApplication(
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
+      ...CSRF_HEADER,
     },
     body: JSON.stringify({ note }),
   })
@@ -175,6 +183,7 @@ export async function promoteToCamper(
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 
@@ -241,6 +250,7 @@ export async function addToWaitlist(
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 
@@ -269,6 +279,7 @@ export async function removeFromWaitlist(
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 
@@ -296,6 +307,7 @@ export async function deferApplication(
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 
@@ -323,6 +335,7 @@ export async function withdrawApplication(
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 
@@ -352,6 +365,7 @@ export async function rejectApplication(
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 
@@ -381,6 +395,7 @@ export async function deactivateApplication(
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 

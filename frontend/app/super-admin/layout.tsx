@@ -46,7 +46,7 @@ const navigationItems: { name: string; href: string; icon: LucideIcon; section: 
     section: 'settings',
   },
   {
-    name: 'Application Management',
+    name: 'Web App Management',
     href: '/super-admin/application-management',
     icon: Palette,
     section: 'appearance',

@@ -31,9 +31,10 @@ async def google_auth(auth_data: GoogleAuthRequest, db: Session = Depends(get_db
     Expects a Google ID token in the credential field.
     Verifies the token and creates/updates user account.
 
-    **Auto-Role Assignment**:
-    - @fasdcamp.org email addresses are automatically assigned 'admin' role
-    - All other email addresses are assigned 'user' role
+    **Security Note**:
+    - All new users are assigned 'user' role regardless of email domain
+    - Admin roles must be manually assigned by a super_admin
+    - This prevents unauthorized admin access via domain control attacks
 
     **Returns**:
     - JWT access token
@@ -67,10 +68,10 @@ async def google_auth(auth_data: GoogleAuthRequest, db: Session = Depends(get_db
                 detail="Email not provided by Google"
             )
 
-        # Determine role based on email domain
-        # @fasdcamp.org users automatically become admins, others become regular users
-        is_fasdcamp_staff = email.endswith('@fasdcamp.org')
-        user_role = "admin" if is_fasdcamp_staff else "user"
+        # Security: All new users start as regular users
+        # Admin/super_admin roles must be manually assigned by existing super_admin
+        # This prevents attackers who control a domain from gaining elevated access
+        user_role = "user"
 
         # Check if user exists by Google ID
         user = db.query(User).filter(User.google_id == google_id).first()

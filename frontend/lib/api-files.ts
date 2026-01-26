@@ -1,8 +1,15 @@
 /**
  * File upload API client
+ *
+ * Security: All state-changing requests include X-Requested-With header for CSRF protection.
  */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
+// CSRF protection header required for state-changing requests
+const CSRF_HEADER = {
+  'X-Requested-With': 'XMLHttpRequest',
+}
 
 export interface FileUploadResponse {
   success: boolean
@@ -39,6 +46,7 @@ export async function uploadFile(
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: formData,
   })
@@ -84,6 +92,7 @@ export async function getFilesBatch(token: string, fileIds: string[]): Promise<F
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
+      ...CSRF_HEADER,
     },
     body: JSON.stringify(fileIds),
   })
@@ -104,6 +113,7 @@ export async function deleteFile(token: string, fileId: string): Promise<void> {
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 
@@ -127,6 +137,7 @@ export async function uploadTemplateFile(
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
     body: formData,
   })

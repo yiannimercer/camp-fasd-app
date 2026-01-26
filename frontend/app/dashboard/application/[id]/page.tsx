@@ -32,6 +32,7 @@ import AllergyList, { Allergy } from '@/components/AllergyList'
 import GenericTable, { TableRow } from '@/components/GenericTable'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeSanitize from 'rehype-sanitize'
 
 export default function ApplicationWizardPage() {
   const params = useParams()
@@ -67,6 +68,16 @@ export default function ApplicationWizardPage() {
   const [allergies, setAllergies] = useState<Record<string, Allergy[]>>({}) // questionId -> allergies
   const [tableData, setTableData] = useState<Record<string, TableRow[]>>({}) // questionId -> table rows
   const [dragOverQuestionId, setDragOverQuestionId] = useState<string | null>(null) // Track which upload area is being dragged over
+
+  // Find Missing Questions feature - helps users locate unanswered required questions
+  const [sectionMissingQuestions, setSectionMissingQuestions] = useState<Array<{
+    questionId: string
+    questionText: string
+    questionNumber: number
+  }>>([])
+  const [currentMissingIndex, setCurrentMissingIndex] = useState(-1)
+  const [highlightedQuestionId, setHighlightedQuestionId] = useState<string | null>(null)
+  const questionRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   // Track unsaved changes for immediate save on page unload
   const hasUnsavedChanges = useRef(false)
@@ -811,6 +822,81 @@ export default function ApplicationWizardPage() {
     return items.sort((a, b) => a.order_index - b.order_index)
   }
 
+  // Compute missing required questions for the current section
+  // This enables the "Find Missing" feature without being intrusive
+  useEffect(() => {
+    if (!sections.length || currentSectionIndex >= sections.length) {
+      setSectionMissingQuestions([])
+      return
+    }
+
+    const currentSection = sections[currentSectionIndex]
+    if (!currentSection) return
+
+    const missing: Array<{ questionId: string; questionText: string; questionNumber: number }> = []
+    let questionNumber = 0
+
+    // Get items in order and check visibility
+    const items = getSectionItems(currentSection)
+
+    items.forEach((item) => {
+      if (item.type !== 'question') return
+
+      const question = item.data as ApplicationQuestion
+
+      // Only count visible questions
+      if (!shouldShowQuestion(question)) return
+
+      questionNumber++
+
+      // Check if required and unanswered
+      if (question.is_required) {
+        const response = responses[question.id]
+        const hasAnswer = response && response.trim() !== ''
+
+        if (!hasAnswer) {
+          missing.push({
+            questionId: question.id,
+            questionText: question.question_text,
+            questionNumber
+          })
+        }
+      }
+    })
+
+    setSectionMissingQuestions(missing)
+    // Reset the navigation index when section changes
+    setCurrentMissingIndex(-1)
+    setHighlightedQuestionId(null)
+  }, [sections, currentSectionIndex, responses])
+
+  // Navigate to the next missing question with smooth scroll and highlight
+  const goToNextMissing = () => {
+    if (sectionMissingQuestions.length === 0) return
+
+    // Calculate next index (cycle through)
+    const nextIndex = currentMissingIndex < sectionMissingQuestions.length - 1
+      ? currentMissingIndex + 1
+      : 0
+
+    setCurrentMissingIndex(nextIndex)
+    const questionId = sectionMissingQuestions[nextIndex].questionId
+
+    // Scroll to the question
+    const element = questionRefs.current[questionId]
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+      // Apply highlight animation
+      setHighlightedQuestionId(questionId)
+
+      // Remove highlight after animation completes
+      setTimeout(() => {
+        setHighlightedQuestionId(null)
+      }, 2500)
+    }
+  }
+
 
   if (loading) {
     return (
@@ -1002,6 +1088,26 @@ export default function ApplicationWizardPage() {
                 <span className="text-sm font-medium text-camp-orange bg-camp-orange/10 px-2 py-0.5 rounded-full">
                   Section {currentSectionIndex + 1}/{sections.length}
                 </span>
+                {/* Find Missing - styled as companion chip to Section indicator */}
+                {sectionMissingQuestions.length > 0 && (
+                  <button
+                    onClick={goToNextMissing}
+                    className="group flex items-center gap-1 text-sm font-medium text-amber-600 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded-full transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                    </span>
+                    <span>
+                      {currentMissingIndex === -1
+                        ? `${sectionMissingQuestions.length} missing`
+                        : `${currentMissingIndex + 1}/${sectionMissingQuestions.length}`}
+                    </span>
+                    <svg className="w-3 h-3 opacity-60 group-hover:opacity-100 group-hover:translate-y-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                    </svg>
+                  </button>
+                )}
               </div>
               <h1 className="text-xl lg:text-2xl font-bold text-camp-charcoal mt-1">
                 {currentSection?.title}
@@ -1057,31 +1163,8 @@ export default function ApplicationWizardPage() {
           </Button>
         </header>
 
-        {/* Questions */}
-        <div className="flex-1 overflow-y-auto">
-          {/* Sticky Section Indicator - stays visible while scrolling */}
-          <div className="sticky top-0 z-20 bg-camp-green/95 backdrop-blur-sm text-white px-4 py-2 shadow-md">
-            <div className="max-w-3xl mx-auto flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium bg-white/20 px-2 py-0.5 rounded-full">
-                  Section {currentSectionIndex + 1}/{sections.length}
-                </span>
-                <span className="text-sm font-semibold">{currentSection?.title}</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs">
-                {getProgressPercentage(currentSection?.id) === 100 ? (
-                  <span className="flex items-center gap-1 bg-white/20 px-2 py-0.5 rounded-full">
-                    <CheckCircle2 className="w-3 h-3" />
-                    Complete
-                  </span>
-                ) : (
-                  <span className="bg-white/20 px-2 py-0.5 rounded-full">
-                    {getProgressPercentage(currentSection?.id)}% done
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
+        {/* Questions - Content area */}
+        <div className="flex-1">
           <div className="p-4 sm:p-6 lg:p-8">
           <div className="max-w-3xl mx-auto">
             <Card className="shadow-lg border-0 ring-1 ring-gray-200/50 overflow-hidden">
@@ -1156,8 +1239,19 @@ export default function ApplicationWizardPage() {
                     questionNumber++ // Increment for visible questions only
                     const qIndex = questionNumber - 1 // 0-based index for display
 
+                    // Check if this question is currently highlighted by the Find Missing feature
+                    const isHighlighted = highlightedQuestionId === question.id
+
                     return (
-                  <div key={question.id} className="pb-6 sm:pb-8 border-b border-gray-200 last:border-0">
+                  <div
+                    key={question.id}
+                    ref={(el) => { questionRefs.current[question.id] = el }}
+                    className={`pb-6 sm:pb-8 border-b border-gray-200 last:border-0 transition-all duration-500 rounded-lg ${
+                      isHighlighted
+                        ? 'bg-gradient-to-r from-amber-50 via-amber-50/80 to-transparent ring-2 ring-amber-300 ring-offset-2 p-4 -mx-4 animate-pulse'
+                        : ''
+                    }`}
+                  >
                     {/* Legacy: Section Header from question field (deprecated) */}
                     {question.header_text && (
                       <div className="mb-6 pb-3 border-b-2 border-camp-green/30">
@@ -1182,7 +1276,10 @@ export default function ApplicationWizardPage() {
 
                     {question.description && (
                       <div className="prose prose-sm max-w-none mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          rehypePlugins={[rehypeSanitize]}
+                        >
                           {question.description}
                         </ReactMarkdown>
                       </div>

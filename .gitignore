@@ -32,6 +32,7 @@ TODO.md
 /frontend/out/
 /frontend/build/
 /backend/dist/
+*.tsbuildinfo
 
 # IDE
 .vscode/

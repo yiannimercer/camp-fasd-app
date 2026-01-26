@@ -178,9 +178,11 @@ function AdminApplicationsContent() {
     const camperName = app.camper_first_name && app.camper_last_name
       ? `${app.camper_first_name} ${app.camper_last_name}`
       : 'Your Camper'
+    const userFirstName = app.user?.first_name || 'there'
     setSelectedAppForEmail(app)
     setEmailSubject(`CAMP FASD - Regarding ${camperName}'s Application`)
-    setEmailMessage('')
+    // Pre-populate with greeting so admin can see/edit it
+    setEmailMessage(`Dear ${userFirstName},\n\n`)
     setEmailModalOpen(true)
   }
 

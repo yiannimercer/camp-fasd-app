@@ -7,6 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.csrf import CSRFProtectionMiddleware
+from app.core.exceptions import ErrorHandlingMiddleware
+from app.core.rate_limit import limiter, rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 app = FastAPI(
     title="CAMP FASD Application Portal API",
@@ -16,14 +20,27 @@ app = FastAPI(
     redoc_url="/api/redoc"
 )
 
-# CORS middleware
+# CORS middleware - restrict to specific methods and headers for security
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Accept"],
 )
+
+# CSRF Protection middleware
+# Requires X-Requested-With header for state-changing requests
+app.add_middleware(CSRFProtectionMiddleware, debug=settings.DEBUG)
+
+# Error handling middleware
+# Catches unhandled exceptions and returns sanitized responses with correlation IDs
+app.add_middleware(ErrorHandlingMiddleware, debug=settings.DEBUG)
+
+# Rate limiting setup
+# Prevents brute force attacks and API abuse
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 @app.get("/")
 async def root():

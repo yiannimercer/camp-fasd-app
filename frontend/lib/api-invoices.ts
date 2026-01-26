@@ -5,6 +5,11 @@
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
+// CSRF protection header required for state-changing requests
+const CSRF_HEADER = {
+  'X-Requested-With': 'XMLHttpRequest',
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -164,6 +169,7 @@ export async function createInvoice(
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      ...CSRF_HEADER,
     },
   })
 
@@ -199,6 +205,7 @@ export async function applyScholarship(
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
+      ...CSRF_HEADER,
     },
     body: JSON.stringify({
       scholarship_amount: scholarshipAmount,
@@ -230,6 +237,7 @@ export async function markInvoicePaid(
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
+      ...CSRF_HEADER,
     },
     body: JSON.stringify({ note }),
   })
@@ -259,6 +267,7 @@ export async function markInvoiceUnpaid(
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
+      ...CSRF_HEADER,
     },
     body: JSON.stringify({ reason }),
   })
@@ -284,6 +293,7 @@ export async function voidInvoice(
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
+      ...CSRF_HEADER,
     },
     body: JSON.stringify({ reason }),
   })
@@ -320,6 +330,7 @@ export async function createPaymentPlan(
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
+      ...CSRF_HEADER,
     },
     body: JSON.stringify({ payments }),
   })
