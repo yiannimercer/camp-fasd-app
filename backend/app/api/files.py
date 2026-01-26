@@ -278,10 +278,19 @@ async def get_files_batch(
     if not file_ids:
         return []
 
+    print(f"[FILES BATCH] Requested {len(file_ids)} files: {file_ids}")
+
     # Get all file records in one query
     file_records = db.query(FileModel).filter(
         FileModel.id.in_(file_ids)
     ).all()
+
+    found_ids = {str(f.id) for f in file_records}
+    missing_ids = set(file_ids) - found_ids
+    if missing_ids:
+        print(f"[FILES BATCH] WARNING: {len(missing_ids)} file(s) not found in database: {missing_ids}")
+
+    print(f"[FILES BATCH] Found {len(file_records)} file records")
 
     # Get all associated application IDs
     app_ids = [f.application_id for f in file_records if f.application_id]
@@ -301,6 +310,7 @@ async def get_files_batch(
         # Check authorization
         if file_record.application_id:
             if str(file_record.application_id) not in user_app_ids and current_user.role not in ["admin", "super_admin"]:
+                print(f"[FILES BATCH] Skipping file {file_record.id} - user lacks access (not owner and not admin)")
                 continue  # Skip files user doesn't have access to
 
         try:
@@ -317,9 +327,10 @@ async def get_files_batch(
             })
         except Exception as e:
             # Log error but continue with other files
-            print(f"Failed to get signed URL for file {file_record.id}: {e}")
+            print(f"[FILES BATCH] Failed to get signed URL for file {file_record.id} (path: {file_record.storage_path}): {e}")
             continue
 
+    print(f"[FILES BATCH] Returning {len(results)} files")
     return results
 
 

@@ -258,13 +258,28 @@ export default function AdminApplicationDetailPage() {
             const batchFiles = await getFilesBatch(token, fileIds)
 
             // Map files to their questions
+            const returnedFileIds = new Set<string>()
             for (const fileInfo of batchFiles) {
+              returnedFileIds.add(fileInfo.id)
               const questionId = fileToQuestionMap[fileInfo.id]
               if (questionId) {
                 filesMap[questionId] = fileInfo
               }
             }
+
+            // Check for files that were requested but not returned (missing or failed)
+            // This prevents infinite "Loading file..." state
+            for (const [fileId, questionId] of Object.entries(fileToQuestionMap)) {
+              if (!returnedFileIds.has(fileId)) {
+                console.error(`File ${fileId} for question ${questionId} was not returned by batch endpoint`)
+                errorsMap[questionId] = 'File not found or could not be loaded'
+              }
+            }
+
             setFiles({ ...filesMap })
+            if (Object.keys(errorsMap).length > 0) {
+              setFileErrors({ ...errorsMap })
+            }
           } catch (err) {
             console.error('Failed to batch load files:', err)
             responsesWithFiles.forEach(r => {
@@ -762,20 +777,63 @@ export default function AdminApplicationDetailPage() {
           )
         }
 
-        // Handle healthcare provider array
-        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].healthcare_provider_name !== undefined) {
+        // Handle healthcare provider array (support both key variants: with and without trailing 's')
+        if (Array.isArray(parsed) && parsed.length > 0 &&
+            (parsed[0].healthcare_provider_name !== undefined || parsed[0].healthcare_providers_name !== undefined)) {
           return (
-            <div className="space-y-2">
-              {parsed.map((provider: any, idx: number) => (
-                <div key={idx} className="bg-green-50 rounded-lg p-3 border border-green-200">
-                  <div className="font-medium text-green-900">{provider.healthcare_provider_name}</div>
-                  <div className="text-sm text-green-700 mt-1">
-                    <div>Type: {provider.healthcare_provider_type || 'N/A'}</div>
-                    <div>Phone: {provider.healthcare_provider_phone || 'N/A'}</div>
-                    <div>May Contact: {provider.healthcare_provider_contact_consent || 'N/A'}</div>
+            <div className="space-y-3">
+              {parsed.map((provider: any, idx: number) => {
+                // Support both key variants
+                const name = provider.healthcare_providers_name || provider.healthcare_provider_name || 'Unknown Provider'
+                const type = provider.healthcare_providers_type || provider.healthcare_provider_type
+                const phone = provider.healthcare_provider_phone || provider.healthcare_providers_phone
+                const consent = provider.healthcare_provider_consent_to_contact || provider.healthcare_provider_contact_consent
+
+                // Format phone number for display
+                const formatPhone = (p: string) => {
+                  if (!p) return null
+                  const cleaned = p.replace(/\D/g, '')
+                  if (cleaned.length === 10) {
+                    return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`
+                  }
+                  return p
+                }
+
+                return (
+                  <div key={idx} className="bg-emerald-50 rounded-lg p-4 border border-emerald-200 shadow-sm">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="font-semibold text-emerald-900 text-lg capitalize">{name}</div>
+                        {type && (
+                          <div className="inline-block mt-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full">
+                            {type}
+                          </div>
+                        )}
+                      </div>
+                      {consent && (
+                        <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                          consent.toLowerCase() === 'yes'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          <span className={`w-2 h-2 rounded-full ${consent.toLowerCase() === 'yes' ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+                          {consent.toLowerCase() === 'yes' ? 'May Contact' : 'Do Not Contact'}
+                        </div>
+                      )}
+                    </div>
+                    {phone && (
+                      <div className="mt-3 pt-3 border-t border-emerald-200">
+                        <div className="text-sm text-emerald-700">
+                          <span className="font-medium">Phone:</span>{' '}
+                          <a href={`tel:${phone}`} className="text-emerald-600 hover:text-emerald-800 hover:underline">
+                            {formatPhone(phone)}
+                          </a>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )
         }
