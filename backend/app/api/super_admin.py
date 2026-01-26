@@ -933,29 +933,39 @@ async def update_configuration(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin_user)
 ):
-    """Update system configuration"""
+    """Update or create system configuration (upsert)"""
 
     config = db.query(SystemConfiguration).filter(SystemConfiguration.key == key).first()
-    if not config:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Configuration not found"
+    is_new = config is None
+    old_value = None
+
+    if is_new:
+        # Create new configuration
+        config = SystemConfiguration(
+            key=key,
+            value=config_data.value if config_data.value is not None else '',
+            description=config_data.description or '',
+            category=config_data.category or 'general',
+            is_public=config_data.is_public if config_data.is_public is not None else False,
+            created_by=current_user.id,
+            updated_by=current_user.id
         )
+        db.add(config)
+    else:
+        old_value = config.value
 
-    old_value = config.value
+        # Update fields
+        if config_data.value is not None:
+            config.value = config_data.value
+        if config_data.description is not None:
+            config.description = config_data.description
+        if config_data.category is not None:
+            config.category = config_data.category
+        if config_data.is_public is not None:
+            config.is_public = config_data.is_public
 
-    # Update fields
-    if config_data.value is not None:
-        config.value = config_data.value
-    if config_data.description is not None:
-        config.description = config_data.description
-    if config_data.category is not None:
-        config.category = config_data.category
-    if config_data.is_public is not None:
-        config.is_public = config_data.is_public
-
-    config.updated_at = datetime.now(timezone.utc)
-    config.updated_by = current_user.id
+        config.updated_at = datetime.now(timezone.utc)
+        config.updated_by = current_user.id
 
     db.commit()
     db.refresh(config)
@@ -964,7 +974,7 @@ async def update_configuration(
     audit_log = AuditLog(
         entity_type='configuration',
         entity_id=config.id,
-        action='updated',
+        action='created' if is_new else 'updated',
         actor_id=current_user.id,
         details={'key': key, 'old_value': old_value, 'new_value': config.value}
     )
