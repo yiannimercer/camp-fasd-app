@@ -945,9 +945,9 @@ async def update_configuration(
             key=key,
             value=config_data.value if config_data.value is not None else '',
             description=config_data.description or '',
+            data_type='string',  # Default to string type
             category=config_data.category or 'general',
             is_public=config_data.is_public if config_data.is_public is not None else False,
-            created_by=current_user.id,
             updated_by=current_user.id
         )
         db.add(config)
