@@ -435,12 +435,12 @@ export default function AdminActionPanel({
 
       {/* Slide-out Panel */}
       <div
-        className={`fixed right-0 top-[104px] h-[calc(100vh-104px)] w-[420px] bg-white shadow-2xl z-30 transform transition-transform duration-300 ease-in-out ${
+        className={`fixed right-0 top-[104px] h-[calc(100vh-104px)] w-[420px] bg-white shadow-2xl z-30 transform transition-transform duration-300 ease-in-out flex flex-col ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         {/* Panel Header */}
-        <div className="bg-gradient-to-r from-camp-green to-camp-green/80 text-white px-6 py-4">
+        <div className="bg-gradient-to-r from-camp-green to-camp-green/80 text-white px-6 py-4 flex-shrink-0">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold">Admin Panel</h2>
             <button
@@ -494,7 +494,7 @@ export default function AdminActionPanel({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-gray-200">
+        <div className="flex border-b border-gray-200 flex-shrink-0">
           <button
             onClick={() => setActiveTab('approval')}
             className={`flex-1 px-2 py-3 text-sm font-medium transition-colors ${
@@ -573,7 +573,7 @@ export default function AdminActionPanel({
         </div>
 
         {/* Tab Content */}
-        <div className="overflow-y-auto h-[calc(100vh-180px)] p-4">
+        <div className="flex-1 overflow-y-auto p-4 min-h-0">
           {/* Approval Tab */}
           {activeTab === 'approval' && (
             <div className="space-y-6">
