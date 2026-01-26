@@ -19,6 +19,11 @@ supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 # Bucket name for application files
 BUCKET_NAME = "application-files"
 
+# Signed URL expiration time in seconds
+# Security: Shorter expiration reduces the window during which a URL can be shared/leaked
+# 15 minutes balances usability (users can view files during a session) with security
+SIGNED_URL_EXPIRATION = 900  # 15 minutes
+
 
 def _storage_error_status(exc: Exception) -> Optional[int]:
     """
@@ -169,10 +174,10 @@ def upload_file(
         # Upload file to Supabase Storage
         _upload_once(file_bytes)
 
-        # Get signed URL (valid for 1 hour - security: shorter expiration reduces exposure window)
+        # Get signed URL with configured expiration
         signed_url = supabase.storage.from_(BUCKET_NAME).create_signed_url(
             file_path,
-            expires_in=3600  # 1 hour in seconds
+            expires_in=SIGNED_URL_EXPIRATION
         )
 
         return {
@@ -190,7 +195,7 @@ def upload_file(
                 _upload_once(file_bytes)
                 signed_url = supabase.storage.from_(BUCKET_NAME).create_signed_url(
                     file_path,
-                    expires_in=3600  # 1 hour
+                    expires_in=SIGNED_URL_EXPIRATION
                 )
                 return {
                     "path": file_path,
@@ -239,13 +244,13 @@ def delete_file(file_path: str) -> bool:
         raise Exception(f"Failed to delete file: {str(e)}")
 
 
-def get_signed_url(file_path: str, expires_in: int = 3600) -> str:
+def get_signed_url(file_path: str, expires_in: int = SIGNED_URL_EXPIRATION) -> str:
     """
     Get a signed URL for accessing a private file
 
     Args:
         file_path: Path to the file in storage
-        expires_in: URL expiration time in seconds (default 1 hour)
+        expires_in: URL expiration time in seconds (default 15 minutes)
 
     Returns:
         Signed URL

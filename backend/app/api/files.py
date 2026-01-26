@@ -248,11 +248,8 @@ async def get_template_file(
         raise HTTPException(status_code=404, detail="Template file not found")
 
     try:
-        # Generate signed URL (valid for 1 hour)
-        signed_url = storage_service.get_signed_url(
-            file_record.storage_path,
-            expires_in=3600
-        )
+        # Generate signed URL (uses default 15-minute expiration)
+        signed_url = storage_service.get_signed_url(file_record.storage_path)
 
         return {
             "id": file_record.id,
@@ -307,11 +304,8 @@ async def get_files_batch(
                 continue  # Skip files user doesn't have access to
 
         try:
-            # Generate signed URL
-            signed_url = storage_service.get_signed_url(
-                file_record.storage_path,
-                expires_in=3600
-            )
+            # Generate signed URL (uses default 15-minute expiration)
+            signed_url = storage_service.get_signed_url(file_record.storage_path)
 
             results.append({
                 "id": str(file_record.id),
@@ -358,11 +352,8 @@ async def get_file(
         raise HTTPException(status_code=403, detail="Access denied")
 
     try:
-        # Generate signed URL (valid for 1 hour)
-        signed_url = storage_service.get_signed_url(
-            file_record.storage_path,
-            expires_in=3600
-        )
+        # Generate signed URL (uses default 15-minute expiration)
+        signed_url = storage_service.get_signed_url(file_record.storage_path)
 
         return {
             "id": file_record.id,

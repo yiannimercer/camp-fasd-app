@@ -187,11 +187,8 @@ async def get_my_applications(
         if file_id and file_id in file_map:
             file_record = file_map[file_id]
             try:
-                # Generate signed URL (valid for 1 hour)
-                signed_url = storage_service.get_signed_url(
-                    file_record.storage_path,
-                    expires_in=3600
-                )
+                # Generate signed URL (uses default 15-minute expiration)
+                signed_url = storage_service.get_signed_url(file_record.storage_path)
                 app_dict['profile_photo_url'] = signed_url
             except Exception as e:
                 # Log error but continue - profile photo is non-critical
