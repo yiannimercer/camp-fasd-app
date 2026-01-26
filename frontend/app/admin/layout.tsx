@@ -103,7 +103,12 @@ export default function AdminLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
+  const pathname = usePathname()
   const { user, loading } = useAuth()
+
+  // Check if we're on an application detail page (which has its own section sidebar)
+  // Pattern: /admin/applications/[id] - but not /admin/applications (list page)
+  const isApplicationDetailPage = pathname?.match(/^\/admin\/applications\/[^/]+$/)
 
   // Role check: allow admin OR super_admin
   useEffect(() => {
@@ -136,13 +141,15 @@ export default function AdminLayout({
 
       <div className="px-4 py-8">
         <div className="flex gap-6">
-          {/* Side Navigation - Only shows at xl (1280px+) to leave room for sections sidebar */}
-          {/* On application detail pages, sections sidebar takes priority */}
-          <div className="hidden xl:block w-52 flex-shrink-0">
-            <div className="sticky top-24">
-              <SidebarNav />
+          {/* Side Navigation - Only shows at xl (1280px+) and NOT on application detail pages */}
+          {/* Application detail pages have their own section sidebar which takes priority */}
+          {!isApplicationDetailPage && (
+            <div className="hidden xl:block w-52 flex-shrink-0">
+              <div className="sticky top-24">
+                <SidebarNav />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Main Content */}
           <div className="flex-1 min-w-0">
