@@ -1141,54 +1141,32 @@ export default function ApplicationWizardPage() {
             <span className="hidden sm:inline">{saving ? 'Saving...' : 'Save & Exit'}</span>
             <span className="sm:hidden">{saving ? 'Saving...' : 'Exit'}</span>
           </Button>
+
+          {/* Find Missing Questions - in header for visibility */}
+          {sectionMissingQuestions.length > 0 &&
+           currentSection?.questions.some(q => responses[q.id] && responses[q.id].trim() !== '') && (
+            <button
+              onClick={goToNextMissing}
+              className="group flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-white px-3 py-1.5 rounded-full font-medium transition-all hover:scale-105 active:scale-95 shadow-md ml-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <span className="hidden sm:inline">
+                {currentMissingIndex === -1
+                  ? `${sectionMissingQuestions.length} missing`
+                  : `${currentMissingIndex + 1}/${sectionMissingQuestions.length}`}
+              </span>
+              <span className="sm:hidden">{sectionMissingQuestions.length}</span>
+              <svg className="w-3 h-3 group-hover:translate-y-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+              </svg>
+            </button>
+          )}
         </header>
 
-        {/* Section Indicator Bar - Sticky below header, always visible while scrolling */}
-        <div className="bg-camp-green/95 backdrop-blur-sm text-white px-4 py-2 shadow-md sticky top-[73px] z-20">
-          <div className="max-w-3xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium bg-white/20 px-2 py-0.5 rounded-full">
-                Section {currentSectionIndex + 1}/{sections.length}
-              </span>
-              <span className="text-sm font-semibold hidden sm:inline">{currentSection?.title}</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-              {/* Find Missing Questions - Chip button */}
-              {sectionMissingQuestions.length > 0 &&
-               currentSection?.questions.some(q => responses[q.id] && responses[q.id].trim() !== '') && (
-                <button
-                  onClick={goToNextMissing}
-                  className="group flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-amber-900 px-2.5 py-0.5 rounded-full font-medium transition-all hover:scale-105 active:scale-95"
-                >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                  <span>
-                    {currentMissingIndex === -1
-                      ? `${sectionMissingQuestions.length} missing`
-                      : `${currentMissingIndex + 1}/${sectionMissingQuestions.length}`}
-                  </span>
-                  <svg className="w-2.5 h-2.5 group-hover:translate-y-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                  </svg>
-                </button>
-              )}
-              {getProgressPercentage(currentSection?.id) === 100 ? (
-                <span className="flex items-center gap-1 bg-white/20 px-2 py-0.5 rounded-full">
-                  <CheckCircle2 className="w-3 h-3" />
-                  Complete
-                </span>
-              ) : (
-                <span className="bg-white/20 px-2 py-0.5 rounded-full">
-                  {getProgressPercentage(currentSection?.id)}% done
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Questions - Scrollable content area */}
-        <div className="flex-1 overflow-y-auto">
+        {/* Questions - Content area */}
+        <div className="flex-1">
           <div className="p-4 sm:p-6 lg:p-8">
           <div className="max-w-3xl mx-auto">
             <Card className="shadow-lg border-0 ring-1 ring-gray-200/50 overflow-hidden">
