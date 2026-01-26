@@ -215,10 +215,11 @@ async def send_adhoc_email(
         )
 
     # Build branded email content
+    # Note: Greeting is NOT added here - it should be included in the message
+    # from the frontend, allowing admins to customize or remove it
     inner_content = email_service.wrap_content_in_brand(
         db=db,
-        content=request.message,
-        greeting=f"Dear {user.first_name},"
+        content=request.message
     )
     html_content = email_service.get_branded_email_wrapper(
         db=db,

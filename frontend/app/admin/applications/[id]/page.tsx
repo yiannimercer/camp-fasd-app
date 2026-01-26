@@ -32,6 +32,12 @@ import GenericTable, { TableRow } from '@/components/GenericTable'
 interface ApplicationData {
   id: string
   user_id: string
+  user?: {
+    id: string
+    email: string
+    first_name: string
+    last_name: string
+  }
   camper_first_name?: string
   camper_last_name?: string
   status: string
@@ -570,8 +576,10 @@ export default function AdminApplicationDetailPage() {
     const camperName = application?.camper_first_name && application?.camper_last_name
       ? `${application.camper_first_name} ${application.camper_last_name}`
       : 'your camper'
+    const userFirstName = application?.user?.first_name || 'there'
     setEmailSubject(`Regarding ${camperName}'s CAMP Application`)
-    setEmailMessage('')
+    // Pre-populate with greeting so admin can see/edit it
+    setEmailMessage(`Dear ${userFirstName},\n\n`)
     setShowEmailDialog(true)
   }
 
