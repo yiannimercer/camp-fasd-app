@@ -1143,8 +1143,8 @@ export default function ApplicationWizardPage() {
           </Button>
         </header>
 
-        {/* Section Indicator Bar - Fixed below header, always visible */}
-        <div className="bg-camp-green/95 backdrop-blur-sm text-white px-4 py-2 shadow-md flex-shrink-0">
+        {/* Section Indicator Bar - Sticky below header, always visible while scrolling */}
+        <div className="bg-camp-green/95 backdrop-blur-sm text-white px-4 py-2 shadow-md sticky top-[73px] z-20">
           <div className="max-w-3xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium bg-white/20 px-2 py-0.5 rounded-full">
