@@ -777,17 +777,23 @@ export default function AdminApplicationDetailPage() {
           )
         }
 
-        // Handle healthcare provider array (support both key variants: with and without trailing 's')
-        if (Array.isArray(parsed) && parsed.length > 0 &&
-            (parsed[0].healthcare_provider_name !== undefined || parsed[0].healthcare_providers_name !== undefined)) {
+        // Handle healthcare provider array (support all key variants)
+        // Variants: healthcare_provider_*, healthcare_providers_*, or simple keys (name, phone, specialty)
+        const isHealthcareProvider = (obj: any) => {
+          return obj.healthcare_provider_name !== undefined ||
+                 obj.healthcare_providers_name !== undefined ||
+                 (obj.name !== undefined && (obj.phone !== undefined || obj.specialty !== undefined))
+        }
+
+        if (Array.isArray(parsed) && parsed.length > 0 && isHealthcareProvider(parsed[0])) {
           return (
             <div className="space-y-3">
               {parsed.map((provider: any, idx: number) => {
-                // Support both key variants
-                const name = provider.healthcare_providers_name || provider.healthcare_provider_name || 'Unknown Provider'
-                const type = provider.healthcare_providers_type || provider.healthcare_provider_type
-                const phone = provider.healthcare_provider_phone || provider.healthcare_providers_phone
-                const consent = provider.healthcare_provider_consent_to_contact || provider.healthcare_provider_contact_consent
+                // Support all key variants
+                const name = provider.healthcare_providers_name || provider.healthcare_provider_name || provider.name || 'Unknown Provider'
+                const type = provider.healthcare_providers_type || provider.healthcare_provider_type || provider.specialty || provider.type
+                const phone = provider.healthcare_provider_phone || provider.healthcare_providers_phone || provider.phone
+                const consent = provider.healthcare_provider_consent_to_contact || provider.healthcare_provider_contact_consent || provider.consent_to_contact || provider.may_contact
 
                 // Format phone number for display
                 const formatPhone = (p: string) => {
