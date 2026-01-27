@@ -31,6 +31,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 import logging
 
+from sqlalchemy import func
+
 from app.models.super_admin import EmailAutomation, EmailTemplate, SystemConfiguration
 from app.models.user import User
 from app.models.application import Application
@@ -38,6 +40,165 @@ from app.services import email_service
 from app.services.email_events import get_recipients_for_automation, build_email_context
 
 logger = logging.getLogger(__name__)
+
+
+def get_template_specific_variables(db: Session, template_key: str, camp_year: int) -> Dict[str, Any]:
+    """
+    Compute template-specific variables that require database queries.
+
+    Different email templates need different computed values. For example,
+    admin_digest needs application statistics, while payment_reminder needs
+    invoice details.
+
+    Args:
+        db: Database session
+        template_key: The email template key
+        camp_year: Current camp year
+
+    Returns:
+        Dict of computed variables specific to this template
+    """
+    variables = {}
+
+    if template_key == 'admin_digest':
+        # Compute all statistics for admin digest
+        week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+
+        variables['digestDate'] = datetime.now().strftime('%B %d, %Y')
+
+        variables['totalApplications'] = db.query(func.count(Application.id)).scalar() or 0
+
+        variables['newThisWeek'] = db.query(func.count(Application.id)).filter(
+            Application.created_at >= week_ago
+        ).scalar() or 0
+
+        variables['notStarted'] = db.query(func.count(Application.id)).filter(
+            Application.status == 'applicant',
+            Application.sub_status == 'not_started'
+        ).scalar() or 0
+
+        variables['incomplete'] = db.query(func.count(Application.id)).filter(
+            Application.status == 'applicant',
+            Application.sub_status == 'incomplete'
+        ).scalar() or 0
+
+        variables['complete'] = db.query(func.count(Application.id)).filter(
+            Application.status == 'applicant',
+            Application.sub_status == 'complete'
+        ).scalar() or 0
+
+        variables['underReview'] = db.query(func.count(Application.id)).filter(
+            Application.status == 'applicant',
+            Application.sub_status == 'under_review'
+        ).scalar() or 0
+
+        variables['waitlisted'] = db.query(func.count(Application.id)).filter(
+            Application.status == 'waitlist'
+        ).scalar() or 0
+
+        variables['acceptedCampers'] = db.query(func.count(Application.id)).filter(
+            Application.status == 'camper'
+        ).scalar() or 0
+
+        variables['unpaidCampers'] = db.query(func.count(Application.id)).filter(
+            Application.status == 'camper',
+            Application.paid_invoice != True
+        ).scalar() or 0
+
+        variables['paidCampers'] = db.query(func.count(Application.id)).filter(
+            Application.status == 'camper',
+            Application.paid_invoice == True
+        ).scalar() or 0
+
+    return variables
+
+
+def get_application_payment_variables(db: Session, application_id) -> Dict[str, Any]:
+    """
+    Compute payment-related variables for a specific application.
+
+    These variables require querying the invoices table for the application.
+
+    Returns:
+        Dict with payment variables:
+        - remainingBalance: Total unpaid amount
+        - amountPaid: Total paid amount
+        - totalAmount: Sum of all invoice amounts
+        - scholarshipAmount: Total discount applied
+        - originalAmount: Total before scholarships
+        - newAmount: Total after scholarships
+        - numberOfPayments: Number of payments in plan
+        - paymentBreakdown: Formatted breakdown string
+    """
+    from app.models.application import Invoice
+    from decimal import Decimal
+
+    variables = {
+        'remainingBalance': '$0',
+        'amountPaid': '$0',
+        'totalAmount': '$0',
+        'scholarshipAmount': '$0',
+        'originalAmount': '$0',
+        'newAmount': '$0',
+        'numberOfPayments': 1,
+        'paymentBreakdown': 'N/A',
+    }
+
+    if not application_id:
+        return variables
+
+    # Query all invoices for this application
+    invoices = db.query(Invoice).filter(
+        Invoice.application_id == application_id
+    ).order_by(Invoice.payment_number).all()
+
+    if not invoices:
+        return variables
+
+    # Calculate totals
+    total_amount = Decimal('0')
+    paid_amount = Decimal('0')
+    scholarship_amount = Decimal('0')
+
+    payment_breakdown_parts = []
+
+    for inv in invoices:
+        amount = Decimal(str(inv.amount)) if inv.amount else Decimal('0')
+        discount = Decimal(str(inv.discount_amount)) if inv.discount_amount else Decimal('0')
+
+        total_amount += amount
+        scholarship_amount += discount
+
+        if inv.status == 'paid':
+            paid_amount += amount
+
+        # Build breakdown for payment plans
+        if inv.total_payments > 1:
+            status_str = "✓ Paid" if inv.status == 'paid' else "Pending"
+            due_str = inv.due_date.strftime('%b %d') if inv.due_date else "TBD"
+            payment_breakdown_parts.append(
+                f"Payment {inv.payment_number}/{inv.total_payments}: ${amount:,.2f} ({due_str}) - {status_str}"
+            )
+
+    remaining = total_amount - paid_amount
+    original_amount = total_amount + scholarship_amount  # Before scholarship
+    new_amount = total_amount  # After scholarship
+
+    # Format as currency strings
+    variables['remainingBalance'] = f"${remaining:,.2f}"
+    variables['amountPaid'] = f"${paid_amount:,.2f}"
+    variables['totalAmount'] = f"${total_amount:,.2f}"
+    variables['scholarshipAmount'] = f"${scholarship_amount:,.2f}"
+    variables['originalAmount'] = f"${original_amount:,.2f}"
+    variables['newAmount'] = f"${new_amount:,.2f}"
+    variables['numberOfPayments'] = invoices[0].total_payments if invoices else 1
+
+    if payment_breakdown_parts:
+        variables['paymentBreakdown'] = "\n".join(payment_breakdown_parts)
+    else:
+        variables['paymentBreakdown'] = f"Single payment: ${total_amount:,.2f}"
+
+    return variables
 
 # Timezone for scheduled automations - Central Time (Chicago)
 # This automatically handles CST (UTC-6) and CDT (UTC-5) transitions
@@ -150,10 +311,12 @@ async def process_scheduled_automation(
         result['recipients_found'] = len(recipients)
         logger.info(f"Automation '{automation.name}': Found {len(recipients)} recipients")
 
-        # Build base context for email variables
-        base_context = {
-            'campYear': camp_year,
-        }
+        # Build base context with ALL standard variables
+        base_context = email_service.get_base_variables(db)
+
+        # Add template-specific computed variables (e.g., statistics for admin_digest)
+        template_vars = get_template_specific_variables(db, automation.template_key, camp_year)
+        base_context.update(template_vars)
 
         # Send to each recipient
         for recipient in recipients:
@@ -174,18 +337,33 @@ async def process_scheduled_automation(
                     'email': recipient.get('email', ''),
                 }
 
-                # Add camper info if available
-                if recipient.get('camper_name'):
-                    recipient_vars['camperName'] = recipient['camper_name']
+                # Add camper info if available from application
                 if recipient.get('application_id'):
+                    app_id = recipient['application_id']
                     # Get application details for more variables
                     app = db.query(Application).filter(
-                        Application.id == recipient['application_id']
+                        Application.id == app_id
                     ).first()
                     if app:
-                        recipient_vars['camperFirstName'] = app.camper_first_name or ''
-                        recipient_vars['camperLastName'] = app.camper_last_name or ''
+                        camper_first = app.camper_first_name or ''
+                        camper_last = app.camper_last_name or ''
+                        camper_name = f"{camper_first} {camper_last}".strip() or "your camper"
+                        recipient_vars['camperFirstName'] = camper_first
+                        recipient_vars['camperLastName'] = camper_last
+                        recipient_vars['camperName'] = camper_name
                         recipient_vars['completionPercentage'] = app.completion_percentage or 0
+                        recipient_vars['status'] = app.status or ''
+                        recipient_vars['subStatus'] = app.sub_status or ''
+
+                        # Add application-specific URL
+                        recipient_vars['applicationUrl'] = f"{base_context.get('appUrl', '')}/dashboard/application/{app_id}"
+
+                    # Add payment variables from invoices
+                    payment_vars = get_application_payment_variables(db, app_id)
+                    recipient_vars.update(payment_vars)
+                elif recipient.get('camper_name'):
+                    # Fallback if camper_name passed directly
+                    recipient_vars['camperName'] = recipient['camper_name']
 
                 # Send email using the template
                 send_result = email_service.send_template_email(
