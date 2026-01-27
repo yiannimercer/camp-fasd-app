@@ -223,8 +223,7 @@ def python_weekday_to_db_day(python_weekday: int) -> int:
 def get_due_scheduled_automations(
     db: Session,
     current_day: int,
-    current_hour: int,
-    min_interval_hours: int = 167  # ~7 days - ensures weekly automations don't re-run
+    current_hour: int
 ) -> List[EmailAutomation]:
     """
     Get scheduled automations that should run at the current day/hour.
@@ -234,18 +233,18 @@ def get_due_scheduled_automations(
     - is_active = True
     - schedule_day matches current_day
     - schedule_hour matches current_hour
-    - last_sent_at is NULL OR last_sent_at < (now - min_interval_hours)
+    - last_sent_at is NULL OR last_sent_at < (now - 1 hour) to prevent double-sends
 
     Args:
         db: Database session
         current_day: Day of week (0=Sunday, 6=Saturday) in Chicago time
         current_hour: Hour of day (0-23) in Chicago time
-        min_interval_hours: Minimum hours between runs (default ~7 days for weekly)
 
     Returns:
         List of EmailAutomation objects ready to be processed
     """
-    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=min_interval_hours)
+    # Only prevent running if it ran within the last hour (prevents double-sends)
+    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=1)
 
     automations = db.query(EmailAutomation).filter(
         EmailAutomation.trigger_type == 'scheduled',
