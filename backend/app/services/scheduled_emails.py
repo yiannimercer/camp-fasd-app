@@ -253,7 +253,7 @@ def get_due_scheduled_automations(
         EmailAutomation.schedule_hour == current_hour,
         or_(
             EmailAutomation.last_sent_at.is_(None),
-            EmailAutomation.last_sent_at < cutoff_time
+            EmailAutomation.last_sent_at <= cutoff_time
         )
     ).all()
 

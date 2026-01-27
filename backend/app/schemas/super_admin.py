@@ -158,6 +158,7 @@ class EmailAutomation(EmailAutomationBase):
     updated_at: datetime
     created_by: Optional[UUID4] = None
     updated_by: Optional[UUID4] = None
+    last_sent_at: Optional[datetime] = None  # Tracks when scheduled automation last ran
 
     class Config:
         from_attributes = True
