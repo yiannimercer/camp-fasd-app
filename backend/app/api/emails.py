@@ -276,15 +276,44 @@ async def send_mass_email(
     # Get base variables for template substitution
     base_vars = email_service.get_base_variables(db)
 
+    # Compute template-specific variables (stats for admin_digest, etc.)
+    # Import here to avoid circular imports
+    from app.services.scheduled_emails import get_template_specific_variables, get_application_payment_variables
+    template_vars = {}
+    if request.template_key:
+        template_vars = get_template_specific_variables(db, request.template_key, base_vars.get('campYear', 2026))
+
     for recipient in request.recipients:
         try:
             # Build recipient-specific variables
             recipient_vars = {
                 **base_vars,
+                **template_vars,  # Include template-specific computed values
                 'firstName': recipient.name.split()[0] if recipient.name else '',
                 'lastName': recipient.name.split()[-1] if recipient.name and ' ' in recipient.name else '',
             }
-            # Add any recipient-specific variables
+
+            # If we have an application_id, query for camper details and payment info
+            if recipient.application_id:
+                app = db.query(Application).filter(Application.id == recipient.application_id).first()
+                if app:
+                    camper_first = app.camper_first_name or ''
+                    camper_last = app.camper_last_name or ''
+                    recipient_vars['camperFirstName'] = camper_first
+                    recipient_vars['camperLastName'] = camper_last
+                    recipient_vars['camperName'] = f"{camper_first} {camper_last}".strip() or "your camper"
+                    recipient_vars['completionPercentage'] = app.completion_percentage or 0
+                    recipient_vars['status'] = app.status or ''
+                    recipient_vars['subStatus'] = app.sub_status or ''
+
+                    # Add application-specific URL
+                    recipient_vars['applicationUrl'] = f"{base_vars.get('appUrl', '')}/dashboard/application/{recipient.application_id}"
+
+                # Add payment variables from invoices
+                payment_vars = get_application_payment_variables(db, recipient.application_id)
+                recipient_vars.update(payment_vars)
+
+            # Add any recipient-specific variables (can override computed ones)
             if recipient.variables:
                 recipient_vars.update(recipient.variables)
 

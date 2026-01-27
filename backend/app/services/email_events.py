@@ -130,6 +130,28 @@ async def fire_email_event(
                 # Build email context for variable substitution
                 context = build_email_context(user, application, extra_context)
 
+                # Add base variables (campYear, appUrl, etc.)
+                base_vars = email_service.get_base_variables(db)
+                # Don't override user-specific vars like firstName
+                for key, value in base_vars.items():
+                    if key not in context:
+                        context[key] = value
+
+                # Add template-specific computed variables (stats for admin_digest, etc.)
+                from app.services.scheduled_emails import get_template_specific_variables, get_application_payment_variables
+                from app.models.super_admin import SystemConfiguration
+                camp_year_config = db.query(SystemConfiguration).filter(SystemConfiguration.key == 'camp_year').first()
+                camp_year = int(camp_year_config.value) if camp_year_config else 2026
+                template_vars = get_template_specific_variables(db, automation.template_key, camp_year)
+                context.update(template_vars)
+
+                # Add payment variables if we have an application
+                if application_id:
+                    payment_vars = get_application_payment_variables(db, application_id)
+                    context.update(payment_vars)
+                    # Add application-specific URL
+                    context['applicationUrl'] = f"{base_vars.get('appUrl', '')}/dashboard/application/{application_id}"
+
                 # Send to each recipient using send_template_email
                 # This properly handles both HTML and Markdown templates
                 for recipient in recipients:

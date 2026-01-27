@@ -312,13 +312,15 @@ def get_base_variables(db: Session) -> Dict[str, Any]:
         tuition_formatted = "$1,195"  # Fallback
 
     # Use FRONTEND_URL from environment (differs per environment: local/dev/prod)
+    website_url = f"https://{config['organization_website']}"
     return {
         'campYear': config['camp_year'],
         'tuitionAmount': tuition_formatted,
         'organizationName': config['organization_name'],
-        'websiteUrl': f"https://{config['organization_website']}",
+        'websiteUrl': website_url,
         'appUrl': settings.FRONTEND_URL,  # Dynamic based on environment
         'paymentUrl': f"{settings.FRONTEND_URL}/dashboard",  # Payment link for families
+        'parentInfoPacketUrl': f"{website_url}/parent-info",  # Parent information packet
         'currentYear': datetime.now().year,
     }
 
