@@ -90,7 +90,7 @@ def get_config_value(db: Session, key: str, default=None):
     return default
 
 
-@router.post("/process-queue")
+@router.get("/process-queue")
 async def process_email_queue(
     db: Session = Depends(get_db),
     authorized: bool = Depends(verify_cron_secret)
@@ -371,7 +371,7 @@ async def trigger_incomplete_reminders(
     return {"success": True, **result}
 
 
-@router.post("/scheduled-automations")
+@router.get("/scheduled-automations")
 async def send_scheduled_automations(
     db: Session = Depends(get_db),
     authorized: bool = Depends(verify_cron_secret)
