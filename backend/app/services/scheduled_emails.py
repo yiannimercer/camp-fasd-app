@@ -62,14 +62,20 @@ def get_template_specific_variables(db: Session, template_key: str, camp_year: i
 
     if template_key == 'admin_digest':
         # Compute all statistics for admin digest
+        # IMPORTANT: Exclude inactive applications from all counts
         week_ago = datetime.now(timezone.utc) - timedelta(days=7)
 
         variables['digestDate'] = datetime.now().strftime('%B %d, %Y')
 
-        variables['totalApplications'] = db.query(func.count(Application.id)).scalar() or 0
+        # Total active applications (exclude inactive status)
+        variables['totalApplications'] = db.query(func.count(Application.id)).filter(
+            Application.status != 'inactive'
+        ).scalar() or 0
 
+        # New this week (exclude inactive)
         variables['newThisWeek'] = db.query(func.count(Application.id)).filter(
-            Application.created_at >= week_ago
+            Application.created_at >= week_ago,
+            Application.status != 'inactive'
         ).scalar() or 0
 
         variables['notStarted'] = db.query(func.count(Application.id)).filter(
