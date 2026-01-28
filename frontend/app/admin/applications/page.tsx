@@ -652,12 +652,9 @@ function AdminApplicationsContent() {
                           {app.camper_dob ? (
                             <Tooltip delayDuration={0}>
                               <TooltipTrigger asChild>
-                                <button
-                                  type="button"
-                                  className="text-sm font-semibold text-camp-green hover:text-camp-green/80 cursor-pointer border-b-2 border-dashed border-camp-green/50 hover:border-camp-green transition-colors"
-                                >
+                                <span className="text-sm font-semibold text-camp-green hover:text-camp-green/80 cursor-pointer">
                                   {app.camper_age}
-                                </button>
+                                </span>
                               </TooltipTrigger>
                               <TooltipContent
                                 side="top"
