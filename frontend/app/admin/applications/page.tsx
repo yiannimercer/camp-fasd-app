@@ -22,6 +22,7 @@ import {
 } from '@/lib/api-admin-actions'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatDateOnlyCST } from '@/lib/date-utils'
 import { ArrowUp, ArrowDown, ArrowUpDown, Mail, Send, Loader2 } from 'lucide-react'
 import { NotesModal } from '@/components/admin/NotesModal'
@@ -420,6 +421,7 @@ function AdminApplicationsContent() {
   }
 
   return (
+    <TooltipProvider>
     <div className="space-y-6">
       {/* Page Header */}
       <div>
@@ -647,12 +649,35 @@ function AdminApplicationsContent() {
                         </td>
                         {/* Age */}
                         <td className="py-4 px-4 min-w-[60px]">
-                          <span
-                            className="text-sm font-medium text-gray-700 cursor-help"
-                            title={app.camper_dob ? `DOB: ${new Date(app.camper_dob + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : undefined}
-                          >
-                            {app.camper_age || <span className="text-gray-400">—</span>}
-                          </span>
+                          {app.camper_dob ? (
+                            <Tooltip delayDuration={0}>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="text-sm font-semibold text-camp-green hover:text-camp-green/80 cursor-pointer border-b-2 border-dashed border-camp-green/50 hover:border-camp-green transition-colors"
+                                >
+                                  {app.camper_age}
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                className="bg-camp-green text-white px-4 py-2.5 rounded-lg shadow-lg border-0"
+                              >
+                                <p className="text-xs font-medium opacity-90">Date of Birth</p>
+                                <p className="text-base font-bold">
+                                  {new Date(app.camper_dob + 'T00:00:00').toLocaleDateString('en-US', {
+                                    month: 'long',
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                  })}
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className="text-sm font-medium text-gray-700">
+                              {app.camper_age || <span className="text-gray-400">—</span>}
+                            </span>
+                          )}
                         </td>
                         {/* Gender */}
                         <td className="py-4 px-4 min-w-[70px]">
@@ -1041,6 +1066,7 @@ function AdminApplicationsContent() {
         isLoading={confirmLoading}
       />
     </div>
+    </TooltipProvider>
   )
 }
 
