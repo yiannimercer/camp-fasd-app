@@ -360,6 +360,7 @@ async def get_all_applications_admin(
                         today = date.today()
                         age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
                         app_dict['camper_age'] = age
+                        app_dict['camper_dob'] = resp.response_value  # Also return DOB for tooltip display
                     except (ValueError, TypeError):
                         pass  # Invalid date format, skip
                     break

@@ -1037,7 +1037,8 @@ export default function AdminApplicationDetailPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       {/* Unified Sticky Header - Navigation + Camper Context */}
-      <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-20">
+      {/* Note: top-16 offsets below the AppHeader (h-16 = 64px) so this sticks just below it */}
+      <header className="bg-white border-b border-gray-200 shadow-sm sticky top-16 z-20">
         {/* Top Bar - Back Navigation */}
         <div className="border-b border-gray-100 bg-gray-50/80">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

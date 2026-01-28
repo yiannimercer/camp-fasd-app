@@ -61,7 +61,15 @@ import {
   Calendar,
   Trash2,
   Play,
-  Pause
+  Pause,
+  ChevronDown,
+  ChevronRight,
+  Sparkles,
+  UserCheck,
+  Tent,
+  CreditCard,
+  Shield,
+  Link2
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ConfirmationModal } from '@/components/shared/ConfirmationModal'
@@ -105,6 +113,88 @@ const EVENT_TRIGGERS = [
 
 // Group events by category for better UI organization
 const EVENT_CATEGORIES = [...new Set(EVENT_TRIGGERS.map(e => e.category))]
+
+// Template lifecycle categories with metadata for organized display
+const TEMPLATE_CATEGORIES = [
+  {
+    key: 'application',
+    label: 'Application',
+    description: 'Initial application and onboarding emails',
+    icon: Sparkles,
+    color: 'emerald',
+    keywords: ['welcome', 'application', 'created', 'started', 'onboard'],
+    events: ['application_created'],
+  },
+  {
+    key: 'applicant',
+    label: 'Applicant Stage',
+    description: 'Emails for applicants progressing through review',
+    icon: UserCheck,
+    color: 'blue',
+    keywords: ['applicant', 'incomplete', 'complete', 'review', 'waitlist'],
+    events: ['applicant_incomplete', 'applicant_complete', 'applicant_under_review', 'applicant_waitlisted'],
+  },
+  {
+    key: 'camper',
+    label: 'Camper Stage',
+    description: 'Post-acceptance camper communications',
+    icon: Tent,
+    color: 'purple',
+    keywords: ['camper', 'accepted', 'promoted', 'camp'],
+    events: ['promoted_to_camper', 'camper_incomplete', 'camper_complete'],
+  },
+  {
+    key: 'payment',
+    label: 'Payment',
+    description: 'Invoice, payment, and scholarship notifications',
+    icon: CreditCard,
+    color: 'amber',
+    keywords: ['payment', 'invoice', 'paid', 'scholarship', 'billing'],
+    events: ['payment_received', 'invoice_generated', 'payment_plan_created', 'scholarship_awarded'],
+  },
+  {
+    key: 'admin',
+    label: 'Admin & Internal',
+    description: 'Administrative digests and internal notifications',
+    icon: Shield,
+    color: 'slate',
+    keywords: ['admin', 'digest', 'internal', 'team', 'approval', 'note'],
+    events: ['admin_note_added', 'team_approval_added', 'all_teams_approved', 'admin_payment_received'],
+  },
+  {
+    key: 'other',
+    label: 'Other Templates',
+    description: 'General and miscellaneous templates',
+    icon: FileText,
+    color: 'gray',
+    keywords: [],
+    events: [],
+  },
+]
+
+// Function to categorize a template based on its key and trigger_event
+const categorizeTemplate = (template: EmailTemplate): string => {
+  // First, check if trigger_event matches a category
+  if (template.trigger_event) {
+    for (const cat of TEMPLATE_CATEGORIES) {
+      if (cat.events.includes(template.trigger_event)) {
+        return cat.key
+      }
+    }
+  }
+
+  // Then check key patterns
+  const keyLower = template.key.toLowerCase()
+  const nameLower = template.name.toLowerCase()
+
+  for (const cat of TEMPLATE_CATEGORIES) {
+    if (cat.keywords.some(kw => keyLower.includes(kw) || nameLower.includes(kw))) {
+      return cat.key
+    }
+  }
+
+  return 'other'
+}
 
 // Audience filter options - organized by status category
 const AUDIENCE_OPTIONS = [
@@ -826,60 +916,150 @@ export default function EmailCommunicationPage() {
 
         {/* ==================== TEMPLATES TAB ==================== */}
         <TabsContent value="templates" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Email Templates</CardTitle>
-                  <CardDescription>
-                    Manage email content and design. Templates define WHAT is sent.
-                  </CardDescription>
-                </div>
-                <Button onClick={openCreateTemplate}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  New Template
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {templates.map((template) => (
-                  <div
-                    key={template.id}
-                    className={`border rounded-lg p-4 ${template.is_active ? 'bg-white' : 'bg-gray-50 opacity-75'}`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-semibold">{template.name}</h4>
-                          <Badge variant="outline">{template.key}</Badge>
-                          {!template.is_active && (
-                            <Badge variant="secondary">Inactive</Badge>
-                          )}
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          Subject: {template.subject}
-                        </p>
-                        {template.variables && template.variables.length > 0 && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            Variables: {template.variables.join(', ')}
-                          </p>
-                        )}
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openEditTemplate(template)}
-                      >
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
-                      </Button>
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">Email Templates</h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Manage email content organized by applicant lifecycle. Templates define WHAT is sent.
+              </p>
+            </div>
+            <Button onClick={openCreateTemplate} className="bg-camp-green hover:bg-camp-green/90">
+              <Plus className="mr-2 h-4 w-4" />
+              New Template
+            </Button>
+          </div>
+
+          {/* Category Sections */}
+          <div className="space-y-4">
+            {TEMPLATE_CATEGORIES.map((category) => {
+              const categoryTemplates = templates.filter(t => categorizeTemplate(t) === category.key)
+              if (categoryTemplates.length === 0) return null
+
+              const CategoryIcon = category.icon
+              const colorMap: Record<string, { bg: string; border: string; icon: string; badge: string }> = {
+                emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', icon: 'text-emerald-600', badge: 'bg-emerald-100 text-emerald-700' },
+                blue: { bg: 'bg-blue-50', border: 'border-blue-200', icon: 'text-blue-600', badge: 'bg-blue-100 text-blue-700' },
+                purple: { bg: 'bg-purple-50', border: 'border-purple-200', icon: 'text-purple-600', badge: 'bg-purple-100 text-purple-700' },
+                amber: { bg: 'bg-amber-50', border: 'border-amber-200', icon: 'text-amber-600', badge: 'bg-amber-100 text-amber-700' },
+                slate: { bg: 'bg-slate-50', border: 'border-slate-200', icon: 'text-slate-600', badge: 'bg-slate-100 text-slate-700' },
+                gray: { bg: 'bg-gray-50', border: 'border-gray-200', icon: 'text-gray-600', badge: 'bg-gray-100 text-gray-700' },
+              }
+              const colors = colorMap[category.color] || colorMap.gray
+
+              return (
+                <details key={category.key} className="group" open>
+                  <summary className={`flex items-center gap-3 p-4 rounded-lg border ${colors.border} ${colors.bg} cursor-pointer hover:shadow-sm transition-shadow list-none`}>
+                    <ChevronRight className="h-4 w-4 text-gray-400 transition-transform group-open:rotate-90" />
+                    <div className={`p-2 rounded-lg ${colors.badge}`}>
+                      <CategoryIcon className={`h-5 w-5 ${colors.icon}`} />
                     </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-gray-900">{category.label}</h3>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-white/80 text-gray-600 border border-gray-200">
+                          {categoryTemplates.length} template{categoryTemplates.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500">{category.description}</p>
+                    </div>
+                  </summary>
+
+                  <div className="mt-3 ml-7 space-y-2">
+                    {categoryTemplates.map((template) => {
+                      // Find automations using this template
+                      const linkedAutomations = automations.filter(a => a.template_key === template.key)
+
+                      return (
+                        <div
+                          key={template.id}
+                          className={`relative border rounded-lg p-4 transition-all hover:shadow-sm ${
+                            template.is_active
+                              ? 'bg-white border-gray-200'
+                              : 'bg-gray-50/50 border-gray-100'
+                          }`}
+                        >
+                          {/* Inactive overlay indicator */}
+                          {!template.is_active && (
+                            <div className="absolute top-3 right-3">
+                              <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-medium">
+                                Inactive
+                              </span>
+                            </div>
+                          )}
+
+                          <div className="flex items-start gap-4">
+                            <div className="flex-1 min-w-0">
+                              {/* Template name and key */}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className={`font-medium ${template.is_active ? 'text-gray-900' : 'text-gray-500'}`}>
+                                  {template.name}
+                                </h4>
+                                <code className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-mono">
+                                  {template.key}
+                                </code>
+                              </div>
+
+                              {/* Subject line */}
+                              <p className={`text-sm mt-1 truncate ${template.is_active ? 'text-gray-600' : 'text-gray-400'}`}>
+                                <span className="text-gray-400">Subject:</span> {template.subject}
+                              </p>
+
+                              {/* Linked automations */}
+                              {linkedAutomations.length > 0 && (
+                                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                  <Link2 className="h-3.5 w-3.5 text-gray-400" />
+                                  {linkedAutomations.map(auto => (
+                                    <span
+                                      key={auto.id}
+                                      className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
+                                        auto.is_active
+                                          ? 'bg-green-100 text-green-700'
+                                          : 'bg-gray-100 text-gray-500'
+                                      }`}
+                                    >
+                                      <Zap className="h-3 w-3" />
+                                      {auto.name}
+                                      {!auto.is_active && <span className="opacity-60">(paused)</span>}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Edit button */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEditTemplate(template)}
+                              className="shrink-0"
+                            >
+                              <Edit className="h-4 w-4" />
+                              <span className="ml-1.5 hidden sm:inline">Edit</span>
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                </details>
+              )
+            })}
+          </div>
+
+          {/* Empty state */}
+          {templates.length === 0 && (
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <FileText className="h-12 w-12 text-gray-300 mb-4" />
+                <p className="text-gray-500 text-center">No templates yet. Create your first email template to get started.</p>
+                <Button onClick={openCreateTemplate} className="mt-4">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Template
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* ==================== DOCUMENTS TAB ==================== */}
@@ -938,9 +1118,30 @@ export default function EmailCommunicationPage() {
                     <p className="text-sm text-muted-foreground">Loading recipients...</p>
                   )}
                   {audienceRecipients.length > 0 && (
-                    <p className="text-sm text-green-600">
-                      {audienceRecipients.length} recipients selected
-                    </p>
+                    <div className="space-y-2">
+                      <p className="text-sm text-green-600">
+                        {audienceRecipients.length} recipients selected
+                      </p>
+                      <details className="group">
+                        <summary className="cursor-pointer text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                          <span className="group-open:rotate-90 transition-transform">▶</span>
+                          View recipient list
+                        </summary>
+                        <div className="mt-2 max-h-48 overflow-y-auto border rounded-lg divide-y divide-gray-100">
+                          {audienceRecipients.map((recipient) => (
+                            <div key={recipient.email} className="px-3 py-2 text-sm hover:bg-gray-50">
+                              <div className="font-medium text-gray-900">{recipient.name}</div>
+                              <div className="text-xs text-gray-500 flex gap-3">
+                                <span>{recipient.email}</span>
+                                {recipient.camper_name && (
+                                  <span className="text-gray-400">• Camper: {recipient.camper_name}</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    </div>
                   )}
                 </div>
 

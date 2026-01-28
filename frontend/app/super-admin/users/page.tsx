@@ -53,6 +53,10 @@ export default function UsersManagementPage() {
   const [teamFilter, setTeamFilter] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState<string>('')
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1)
+  const pageSize = 25 // Users per page
+
   // Actions dropdown
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -139,6 +143,7 @@ export default function UsersManagementPage() {
           status: statusFilter || undefined,
           team: teamFilter || undefined,
           search: searchTerm || undefined,
+          limit: 1000,  // Load all users (backend max is typically 1000)
         }),
         getAllTeams(token)
       ])
@@ -153,9 +158,10 @@ export default function UsersManagementPage() {
     }
   }
 
-  // Reload when filters change
+  // Reload when filters change and reset pagination
   useEffect(() => {
     if (!token) return
+    setCurrentPage(1)  // Reset to first page when filters change
     loadData()
   }, [roleFilter, statusFilter, teamFilter, searchTerm])
 
@@ -527,37 +533,40 @@ export default function UsersManagementPage() {
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full divide-y divide-gray-200 table-fixed min-w-[800px]">
+            <table className="w-full divide-y divide-gray-200 table-fixed min-w-[900px]">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="w-[16%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-[14%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Name
                   </th>
-                  <th className="w-[18%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-[12%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Camper
+                  </th>
+                  <th className="w-[16%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Email
                   </th>
-                  <th className="w-[11%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-[10%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Role
                   </th>
-                  <th className="w-[11%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-[10%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Team
                   </th>
-                  <th className="w-[9%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-[8%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="w-[10%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-[9%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Created
                   </th>
-                  <th className="w-[13%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-[11%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Last Login
                   </th>
-                  <th className="w-[12%] px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-[10%] px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {users.map((user) => (
+                {users.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50">
                     <td className="px-4 py-4">
                       <div className="text-sm font-medium text-gray-900 truncate">
@@ -565,6 +574,15 @@ export default function UsersManagementPage() {
                       </div>
                       {user.phone && (
                         <div className="text-xs text-gray-500">{formatPhoneNumber(user.phone)}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-4">
+                      {user.camper_name ? (
+                        <div className="text-sm text-gray-900 truncate" title={user.camper_name}>
+                          {user.camper_name}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400">—</span>
                       )}
                     </td>
                     <td className="px-4 py-4">
@@ -709,6 +727,59 @@ export default function UsersManagementPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {users.length > pageSize && (
+            <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
+              <div className="text-sm text-gray-600">
+                Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, users.length)} of {users.length} users
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, Math.ceil(users.length / pageSize)) }, (_, i) => {
+                    const totalPages = Math.ceil(users.length / pageSize)
+                    let pageNum
+                    if (totalPages <= 5) {
+                      pageNum = i + 1
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i
+                    } else {
+                      pageNum = currentPage - 2 + i
+                    }
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`w-8 h-8 text-sm font-medium rounded-lg ${
+                          currentPage === pageNum
+                            ? 'bg-camp-green text-white'
+                            : 'bg-white border border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    )
+                  })}
+                </div>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(users.length / pageSize), p + 1))}
+                  disabled={currentPage === Math.ceil(users.length / pageSize)}
+                  className="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
 
           {users.length === 0 && !loading && (
             <div className="text-center py-12">

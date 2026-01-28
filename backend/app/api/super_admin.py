@@ -271,7 +271,7 @@ async def get_all_users(
     team: Optional[str] = Query(None, description="Filter by team (for admins)"),
     search: Optional[str] = Query(None, description="Search by name or email"),
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(1000, ge=1, le=1000),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin_user)
 ):
@@ -305,7 +305,28 @@ async def get_all_users(
     # Apply pagination
     users = query.order_by(User.created_at.desc()).offset(skip).limit(limit).all()
 
-    return [UserResponse.model_validate(user) for user in users]
+    # Get user IDs to query applications in bulk
+    user_ids = [str(u.id) for u in users]
+
+    # Query applications to get camper names for each user
+    from app.models.application import Application
+    applications = db.query(Application).filter(Application.user_id.in_(user_ids)).all()
+
+    # Build a mapping of user_id -> camper_name
+    user_camper_map = {}
+    for app in applications:
+        camper_name = f"{app.camper_first_name or ''} {app.camper_last_name or ''}".strip()
+        if camper_name:
+            user_camper_map[str(app.user_id)] = camper_name
+
+    # Build response with camper_name included
+    result = []
+    for user in users:
+        user_dict = UserResponse.model_validate(user).model_dump()
+        user_dict['camper_name'] = user_camper_map.get(str(user.id))
+        result.append(user_dict)
+
+    return result
 
 
 @router.patch("/users/{user_id}", response_model=UserResponse)

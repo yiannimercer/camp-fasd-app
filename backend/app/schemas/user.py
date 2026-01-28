@@ -56,6 +56,7 @@ class UserResponse(BaseModel):
     email_deliverability_confirmed_at: Optional[datetime] = None
     created_at: datetime
     last_login: Optional[datetime] = None
+    camper_name: Optional[str] = None  # Associated camper name from applications
 
     class Config:
         from_attributes = True

@@ -647,7 +647,10 @@ function AdminApplicationsContent() {
                         </td>
                         {/* Age */}
                         <td className="py-4 px-4 min-w-[60px]">
-                          <span className="text-sm font-medium text-gray-700">
+                          <span
+                            className="text-sm font-medium text-gray-700 cursor-help"
+                            title={app.camper_dob ? `DOB: ${new Date(app.camper_dob + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : undefined}
+                          >
                             {app.camper_age || <span className="text-gray-400">—</span>}
                           </span>
                         </td>

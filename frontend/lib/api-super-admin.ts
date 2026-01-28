@@ -152,6 +152,7 @@ export interface UserWithDetails {
   receive_emails: boolean
   created_at: string
   last_login: string | null
+  camper_name: string | null  // Associated camper name from applications
 }
 
 // ============================================================================

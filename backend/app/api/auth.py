@@ -261,12 +261,28 @@ async def mark_password_set(
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user: User = Depends(get_current_user)):
+async def get_current_user_info(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     Get current user information
 
     Requires authentication (Bearer token in Authorization header)
+    Also updates last_login timestamp (if not updated in the last hour)
     """
+    # Update last_login if it hasn't been set or is more than 1 hour old
+    now = datetime.utcnow()
+    should_update = (
+        current_user.last_login is None or
+        (now - current_user.last_login).total_seconds() > 3600  # 1 hour
+    )
+
+    if should_update:
+        current_user.last_login = now
+        db.commit()
+        db.refresh(current_user)
+
     return UserResponse.model_validate(current_user)
 
 

@@ -33,6 +33,7 @@ export interface ApplicationWithUser {
   cabin_assignment?: string
   // Camper metadata
   camper_age?: number
+  camper_dob?: string  // Date of birth (YYYY-MM-DD format) for tooltip display
   camper_gender?: string
   tuition_status?: string
   // Payment tracking
