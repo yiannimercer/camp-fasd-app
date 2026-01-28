@@ -88,6 +88,7 @@ export default function AdminApplicationDetailPage() {
   const [error, setError] = useState<string>('')
   const [editingQuestion, setEditingQuestion] = useState<string | null>(null)
   const [editValue, setEditValue] = useState<string>('')
+  const [editDetailValue, setEditDetailValue] = useState<string>('')  // For detail prompt responses
   const [saving, setSaving] = useState(false)
   const [uploadingFile, setUploadingFile] = useState(false)
   const [editingFileQuestion, setEditingFileQuestion] = useState<string | null>(null)
@@ -847,10 +848,15 @@ export default function AdminApplicationDetailPage() {
         // Handle JSON with value/detail structure
         if (parsed.value !== undefined) {
           return (
-            <span>
-              {parsed.value}
-              {parsed.detail && <span className="text-gray-500 ml-2">({parsed.detail})</span>}
-            </span>
+            <div>
+              <span>{parsed.value}</span>
+              {parsed.detail && (
+                <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-xs font-medium text-amber-700 mb-1">Additional Details:</p>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{parsed.detail}</p>
+                </div>
+              )}
+            </div>
           )
         }
       } catch {
@@ -865,7 +871,22 @@ export default function AdminApplicationDetailPage() {
 
   const handleStartEdit = (questionId: string, currentValue: string, questionType?: string) => {
     setEditingQuestion(questionId)
-    setEditValue(currentValue || '')
+
+    // Parse JSON responses that may contain {value, detail} structure
+    let mainValue = currentValue || ''
+    let detailValue = ''
+    try {
+      const parsed = JSON.parse(currentValue)
+      if (parsed && typeof parsed === 'object' && parsed.value !== undefined) {
+        mainValue = parsed.value || ''
+        detailValue = parsed.detail || ''
+      }
+    } catch {
+      // Not JSON, use as-is
+    }
+
+    setEditValue(mainValue)
+    setEditDetailValue(detailValue)
 
     // Initialize complex data types from JSON
     if (questionType === 'medication_list' && currentValue) {
@@ -895,6 +916,7 @@ export default function AdminApplicationDetailPage() {
   const handleCancelEdit = () => {
     setEditingQuestion(null)
     setEditValue('')
+    setEditDetailValue('')
     setEditMedications([])
     setEditAllergies([])
     setEditTableData([])
@@ -911,6 +933,9 @@ export default function AdminApplicationDetailPage() {
       valueToSave = JSON.stringify(editAllergies)
     } else if (questionType === 'table') {
       valueToSave = JSON.stringify(editTableData)
+    } else if (editDetailValue) {
+      // If there's a detail value, save as JSON with both value and detail
+      valueToSave = JSON.stringify({ value: editValue, detail: editDetailValue })
     }
 
     try {
@@ -933,6 +958,7 @@ export default function AdminApplicationDetailPage() {
 
       setEditingQuestion(null)
       setEditValue('')
+      setEditDetailValue('')
 
       // Show success feedback
       toast.success('Changes saved successfully!')
@@ -1573,6 +1599,34 @@ export default function AdminApplicationDetailPage() {
                                         disabled={saving}
                                       />
                                     )}
+
+                                    {/* Detail prompt field - shown when question has detail_prompt AND (detail exists OR answer triggers it) */}
+                                    {question.detail_prompt_text && (
+                                      editDetailValue ||
+                                      (question.detail_prompt_trigger &&
+                                       Array.isArray(question.detail_prompt_trigger) &&
+                                       question.detail_prompt_trigger.includes(editValue))
+                                    ) && (
+                                      <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                                        <label className="block text-sm font-medium text-amber-800 mb-2">
+                                          {question.detail_prompt_text}
+                                        </label>
+                                        <textarea
+                                          value={editDetailValue}
+                                          onChange={(e) => setEditDetailValue(e.target.value)}
+                                          className="w-full px-3 py-2 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent resize-none bg-white"
+                                          rows={3}
+                                          placeholder="Enter additional details..."
+                                          disabled={saving}
+                                        />
+                                        {editDetailValue && !question.detail_prompt_trigger?.includes(editValue) && (
+                                          <p className="text-xs text-amber-700 mt-2 italic">
+                                            Note: This detail was provided previously and will be preserved even though the current answer doesn't require it.
+                                          </p>
+                                        )}
+                                      </div>
+                                    )}
+
                                     <div className="flex gap-2">
                                       <Button
                                         size="sm"
