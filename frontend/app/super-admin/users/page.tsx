@@ -543,31 +543,31 @@ export default function UsersManagementPage() {
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full divide-y divide-gray-200 table-fixed min-w-[850px]">
+            <table className="w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="w-[15%] px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Name
                   </th>
-                  <th className="w-[12%] px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Camper
                   </th>
-                  <th className="w-[18%] px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Email
                   </th>
-                  <th className="w-[15%] px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Role / Team
                   </th>
-                  <th className="w-[8%] px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Status
                   </th>
-                  <th className="w-[10%] px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Created
                   </th>
-                  <th className="w-[12%] px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Last Login
                   </th>
-                  <th className="w-[10%] px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Actions
                   </th>
                 </tr>
@@ -575,29 +575,29 @@ export default function UsersManagementPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {users.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50">
-                    <td className="px-3 py-3">
-                      <div className="text-sm font-medium text-gray-900 truncate">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">
                         {user.first_name} {user.last_name}
                       </div>
                       {user.phone && (
                         <div className="text-xs text-gray-500">{formatPhoneNumber(user.phone)}</div>
                       )}
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       {user.camper_name ? (
-                        <div className="text-sm text-gray-900 truncate" title={user.camper_name}>
+                        <div className="text-sm text-gray-900">
                           {user.camper_name}
                         </div>
                       ) : (
                         <span className="text-sm text-gray-400">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-3">
-                      <div className="text-sm text-gray-900 truncate" title={user.email}>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
                         {user.email}
                       </div>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex flex-col gap-1">
                         {(() => {
                           const badgeStyles = getRoleBadgeStyles(user.role)
@@ -609,7 +609,7 @@ export default function UsersManagementPage() {
                         })()}
                         {user.team && (
                           <span
-                            className="px-2 py-0.5 inline-flex text-[10px] leading-4 font-semibold rounded truncate"
+                            className="px-2 py-0.5 inline-flex text-[10px] leading-4 font-semibold rounded"
                             style={getTeamStyle(user.team)}
                           >
                             {getTeamColor(user.team).name}
@@ -617,15 +617,15 @@ export default function UsersManagementPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`px-2 py-0.5 inline-flex text-[10px] leading-4 font-semibold rounded-full ${getStatusBadgeColor(user.status)}`}>
                         {user.status || 'active'}
                       </span>
                     </td>
-                    <td className="px-3 py-3 text-sm text-gray-500">
+                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
                       {new Date(user.created_at).toLocaleDateString()}
                     </td>
-                    <td className="px-3 py-3 text-sm text-gray-500">
+                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
                       {user.last_login ? (
                         <span title={new Date(user.last_login).toLocaleString()}>
                           {formatRelativeTime(user.last_login)}
@@ -634,7 +634,7 @@ export default function UsersManagementPage() {
                         <span className="text-gray-400 italic">Never</span>
                       )}
                     </td>
-                    <td className="px-3 py-3 text-right">
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
                       <div className="relative inline-block" ref={openDropdown === user.id ? dropdownRef : null}>
                         <button
                           onClick={() => setOpenDropdown(openDropdown === user.id ? null : user.id)}
