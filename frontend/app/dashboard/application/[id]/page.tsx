@@ -777,6 +777,20 @@ export default function ApplicationWizardPage() {
     return sectionProgress.completion_percentage || 0
   }
 
+  // Helper to extract value from potentially JSON response (for detail prompts)
+  const extractResponseValue = (responseValue: string | undefined): string | undefined => {
+    if (!responseValue) return responseValue;
+    try {
+      const parsed = JSON.parse(responseValue);
+      if (parsed && typeof parsed === 'object' && parsed.value !== undefined) {
+        return parsed.value;
+      }
+    } catch {
+      // Not JSON, return as-is
+    }
+    return responseValue;
+  };
+
   // Check if a question should be shown based on conditional logic
   const shouldShowQuestion = (question: any): boolean => {
     // If no conditional logic, always show
@@ -787,23 +801,28 @@ export default function ApplicationWizardPage() {
     // Get the response to the trigger question
     const triggerResponse = responses[question.show_if_question_id];
 
+    // Extract actual value (handles JSON responses with detail prompts)
+    // e.g., {"value": "Yes", "detail": "..."} -> "Yes"
+    const actualValue = extractResponseValue(triggerResponse);
+
     // Debug logging for troubleshooting
     console.log('shouldShowQuestion check:', {
       questionText: question.question_text,
       showIfQuestionId: question.show_if_question_id,
       showIfAnswer: question.show_if_answer,
       triggerResponse,
-      willShow: triggerResponse && triggerResponse !== '' && triggerResponse === question.show_if_answer
+      actualValue,
+      willShow: actualValue && actualValue !== '' && actualValue === question.show_if_answer
     });
 
     // Only show if trigger response exists AND matches expected answer
     // This prevents conditional questions from showing before the trigger is answered
-    if (!triggerResponse || triggerResponse === '') {
+    if (!actualValue || actualValue === '') {
       return false;
     }
 
     // Show if the trigger question has the expected answer
-    return triggerResponse === question.show_if_answer;
+    return actualValue === question.show_if_answer;
   }
 
   // Helper type for unified section items (headers + questions)

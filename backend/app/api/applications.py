@@ -2,6 +2,7 @@
 Application API endpoints
 """
 
+import json
 from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -584,6 +585,31 @@ def is_response_empty(response_value: str) -> bool:
     return False
 
 
+def extract_response_value(response_value: Optional[str]) -> Optional[str]:
+    """
+    Extract the actual answer value from a response that may be stored as JSON.
+
+    Responses with detail prompts are stored as: {"value": "Yes", "detail": "..."}
+    This function extracts just the "value" field for conditional logic matching.
+
+    Returns the original value if it's not JSON or doesn't have a "value" field.
+    """
+    if not response_value:
+        return response_value
+
+    # Try to parse as JSON
+    try:
+        parsed = json.loads(response_value)
+        # If it's a dict with a "value" key, return that
+        if isinstance(parsed, dict) and 'value' in parsed:
+            return parsed['value']
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    # Not JSON or no "value" field, return as-is
+    return response_value
+
+
 @router.post("/{application_id}/reactivate", response_model=ApplicationSchema)
 async def reactivate_application(
     application_id: str,
@@ -786,8 +812,12 @@ async def get_application_progress(
         # Get the trigger question's response
         trigger_response = response_dict.get(str(question.show_if_question_id))
 
+        # Extract the actual value (handles JSON responses with detail prompts)
+        # e.g., {"value": "Yes", "detail": "..."} -> "Yes"
+        actual_value = extract_response_value(trigger_response)
+
         # Show the question only if the trigger response matches the expected answer
-        return trigger_response == question.show_if_answer
+        return actual_value == question.show_if_answer
 
     section_progress_list = []
     completed_sections = 0
@@ -908,7 +938,9 @@ def calculate_completion_for_status(db: Session, application_id: str, target_sta
         if not question.show_if_question_id or not question.show_if_answer:
             return True
         trigger_response = response_dict.get(str(question.show_if_question_id))
-        return trigger_response is not None and trigger_response == question.show_if_answer
+        # Extract the actual value (handles JSON responses with detail prompts)
+        actual_value = extract_response_value(trigger_response)
+        return actual_value is not None and actual_value == question.show_if_answer
 
     completed_sections = 0
     sections_with_requirements = 0
@@ -1005,7 +1037,10 @@ def calculate_completion_percentage(db: Session, application_id: str) -> int:
         if not question.show_if_question_id or not question.show_if_answer:
             return True
         trigger_response = response_dict.get(str(question.show_if_question_id))
-        return trigger_response == question.show_if_answer
+        # Extract the actual value (handles JSON responses with detail prompts)
+        # e.g., {"value": "Yes", "detail": "..."} -> "Yes"
+        actual_value = extract_response_value(trigger_response)
+        return actual_value == question.show_if_answer
 
     # Count sections with required questions and how many are complete
     sections_with_requirements = 0
