@@ -320,31 +320,41 @@ export default function UsersManagementPage() {
     }
   }
 
-  // Refined role badge styling - uses inline styles for more control
+  // Compact role badge styling
   const getRoleBadgeStyles = (role: string): { className: string; style?: React.CSSProperties } => {
+    const baseClass = 'px-2 py-0.5 inline-flex items-center text-[10px] font-bold rounded tracking-wide uppercase border'
     switch (role) {
       case 'super_admin':
         return {
-          className: 'px-2.5 py-1 inline-flex items-center text-[11px] font-semibold rounded-md whitespace-nowrap tracking-wide uppercase border',
+          className: baseClass,
           style: {
             background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)',
             color: '#92400E',
             borderColor: '#F59E0B',
-            boxShadow: '0 1px 2px rgba(245, 158, 11, 0.15)'
           }
         }
       case 'admin':
         return {
-          className: 'px-2.5 py-1 inline-flex items-center text-[11px] font-semibold rounded-md whitespace-nowrap tracking-wide uppercase border bg-blue-50 text-blue-700 border-blue-200'
+          className: `${baseClass} bg-blue-50 text-blue-700 border-blue-200`
         }
       case 'user':
         return {
-          className: 'px-2.5 py-1 inline-flex items-center text-[11px] font-semibold rounded-md whitespace-nowrap tracking-wide uppercase border bg-gray-50 text-gray-600 border-gray-200'
+          className: `${baseClass} bg-gray-100 text-gray-600 border-gray-300`
         }
       default:
         return {
-          className: 'px-2.5 py-1 inline-flex items-center text-[11px] font-semibold rounded-md whitespace-nowrap tracking-wide uppercase border bg-gray-50 text-gray-600 border-gray-200'
+          className: `${baseClass} bg-gray-100 text-gray-600 border-gray-300`
         }
+    }
+  }
+
+  // Get role display text (abbreviated for super_admin)
+  const getRoleDisplayText = (role: string): string => {
+    switch (role) {
+      case 'super_admin': return 'SUPER'
+      case 'admin': return 'ADMIN'
+      case 'user': return 'USER'
+      default: return role.toUpperCase()
     }
   }
 
@@ -533,34 +543,31 @@ export default function UsersManagementPage() {
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full divide-y divide-gray-200 table-fixed min-w-[900px]">
+            <table className="w-full divide-y divide-gray-200 table-fixed min-w-[850px]">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="w-[14%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-[15%] px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Name
                   </th>
-                  <th className="w-[12%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-[12%] px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Camper
                   </th>
-                  <th className="w-[16%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-[18%] px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Email
                   </th>
-                  <th className="w-[10%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Role
+                  <th className="w-[15%] px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Role / Team
                   </th>
-                  <th className="w-[10%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Team
-                  </th>
-                  <th className="w-[8%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-[8%] px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="w-[9%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-[10%] px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Created
                   </th>
-                  <th className="w-[11%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-[12%] px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Last Login
                   </th>
-                  <th className="w-[10%] px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-[10%] px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -568,7 +575,7 @@ export default function UsersManagementPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {users.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-3">
                       <div className="text-sm font-medium text-gray-900 truncate">
                         {user.first_name} {user.last_name}
                       </div>
@@ -576,7 +583,7 @@ export default function UsersManagementPage() {
                         <div className="text-xs text-gray-500">{formatPhoneNumber(user.phone)}</div>
                       )}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-3">
                       {user.camper_name ? (
                         <div className="text-sm text-gray-900 truncate" title={user.camper_name}>
                           {user.camper_name}
@@ -585,42 +592,40 @@ export default function UsersManagementPage() {
                         <span className="text-sm text-gray-400">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-3">
                       <div className="text-sm text-gray-900 truncate" title={user.email}>
                         {user.email}
                       </div>
                     </td>
-                    <td className="px-4 py-4">
-                      {(() => {
-                        const badgeStyles = getRoleBadgeStyles(user.role)
-                        return (
-                          <span className={badgeStyles.className} style={badgeStyles.style}>
-                            {user.role === 'super_admin' ? 'Super Admin' : user.role === 'admin' ? 'Admin' : 'User'}
+                    <td className="px-3 py-3">
+                      <div className="flex flex-col gap-1">
+                        {(() => {
+                          const badgeStyles = getRoleBadgeStyles(user.role)
+                          return (
+                            <span className={badgeStyles.className} style={badgeStyles.style}>
+                              {getRoleDisplayText(user.role)}
+                            </span>
+                          )
+                        })()}
+                        {user.team && (
+                          <span
+                            className="px-2 py-0.5 inline-flex text-[10px] leading-4 font-semibold rounded truncate"
+                            style={getTeamStyle(user.team)}
+                          >
+                            {getTeamColor(user.team).name}
                           </span>
-                        )
-                      })()}
+                        )}
+                      </div>
                     </td>
-                    <td className="px-4 py-4">
-                      {user.team ? (
-                        <span
-                          className="px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full truncate max-w-full"
-                          style={getTeamStyle(user.team)}
-                        >
-                          {getTeamColor(user.team).name}
-                        </span>
-                      ) : (
-                        <span className="text-sm text-gray-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-4">
-                      <span className={`px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeColor(user.status)}`}>
+                    <td className="px-3 py-3">
+                      <span className={`px-2 py-0.5 inline-flex text-[10px] leading-4 font-semibold rounded-full ${getStatusBadgeColor(user.status)}`}>
                         {user.status || 'active'}
                       </span>
                     </td>
-                    <td className="px-4 py-4 text-sm text-gray-500">
+                    <td className="px-3 py-3 text-sm text-gray-500">
                       {new Date(user.created_at).toLocaleDateString()}
                     </td>
-                    <td className="px-4 py-4 text-sm text-gray-500">
+                    <td className="px-3 py-3 text-sm text-gray-500">
                       {user.last_login ? (
                         <span title={new Date(user.last_login).toLocaleString()}>
                           {formatRelativeTime(user.last_login)}
@@ -629,7 +634,7 @@ export default function UsersManagementPage() {
                         <span className="text-gray-400 italic">Never</span>
                       )}
                     </td>
-                    <td className="px-4 py-4 text-right">
+                    <td className="px-3 py-3 text-right">
                       <div className="relative inline-block" ref={openDropdown === user.id ? dropdownRef : null}>
                         <button
                           onClick={() => setOpenDropdown(openDropdown === user.id ? null : user.id)}
